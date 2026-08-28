@@ -251,11 +251,7 @@ describe("Herdr attached Pi sessions", () => {
     expect(session.describePersistence()?.metadata).toMatchObject({
       lastSyncedNativeEntryId: "assistant-1",
     });
-    expect(persistedCursorsDuringEvents).toEqual([
-      "user-2",
-      "assistant-1",
-      "assistant-1",
-    ]);
+    expect(persistedCursorsDuringEvents).toEqual(["user-2", "assistant-1", "assistant-1"]);
     await session.close();
 
     expect(events).toEqual([
@@ -354,9 +350,9 @@ describe("Herdr attached Pi sessions", () => {
       pollIntervalMs: 60_000,
     });
     const events: AgentStreamEvent[] = [];
-    session.subscribe((event) => events.push(event));
 
     await session.startTurn("still running");
+    session.subscribe((event) => events.push(event));
     herdr.agents = [];
     await session.reconcileHistory();
 
@@ -388,14 +384,12 @@ describe("Herdr attached Pi sessions", () => {
       pollIntervalMs: 60_000,
     });
     const events: AgentStreamEvent[] = [];
-    session.subscribe((event) => events.push(event));
 
     await session.startTurn("new prompt", { clientMessageId: "new-client-message" });
+    session.subscribe((event) => events.push(event));
     await session.reconcileHistory();
 
-    expect(events).not.toContainEqual(
-      expect.objectContaining({ type: "turn_completed" }),
-    );
+    expect(events).not.toContainEqual(expect.objectContaining({ type: "turn_completed" }));
     await expect(session.startTurn("duplicate")).rejects.toThrow(
       "A Herdr-attached Pi turn is already active",
     );
@@ -416,9 +410,7 @@ describe("Herdr attached Pi sessions", () => {
     ]);
     await session.reconcileHistory();
 
-    expect(events).toContainEqual(
-      expect.objectContaining({ type: "turn_completed" }),
-    );
+    expect(events).toContainEqual(expect.objectContaining({ type: "turn_completed" }));
     await session.close();
   });
 
@@ -451,9 +443,7 @@ describe("Herdr attached Pi sessions", () => {
     const cursors: Array<string | undefined> = [];
     session.subscribe((event) => {
       cursors.push(
-        session.describePersistence(event)?.metadata?.lastSyncedNativeEntryId as
-          | string
-          | undefined,
+        session.describePersistence(event)?.metadata?.lastSyncedNativeEntryId as string | undefined,
       );
     });
 
