@@ -6,7 +6,7 @@ import type { HerdrAgent } from "./herdr-client.js";
 export const HERDR_ATTACHED_PI_RUNTIME = "herdr-attached";
 const HERDR_ATTACHED_PI_HANDLE_PREFIX = "herdr-attached:";
 
-export interface HerdrAttachedPiMetadata {
+export interface HerdrAttachedPiMetadata extends AgentMetadata {
   runtime: typeof HERDR_ATTACHED_PI_RUNTIME;
   herdrSession: string;
   herdrTarget: string;
@@ -21,9 +21,9 @@ export interface HerdrAttachedPiMetadata {
 export type HerdrAttachedPiValidationResult = { ok: true } | { ok: false; reason: string };
 
 export function encodeHerdrAttachedPiHandle(metadata: HerdrAttachedPiMetadata): string {
-  const payload = Buffer.from(
-    JSON.stringify(toHerdrAttachedPiIdentity(metadata)),
-  ).toString("base64url");
+  const payload = Buffer.from(JSON.stringify(toHerdrAttachedPiIdentity(metadata))).toString(
+    "base64url",
+  );
   return `${HERDR_ATTACHED_PI_HANDLE_PREFIX}${payload}`;
 }
 
