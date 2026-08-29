@@ -28,7 +28,9 @@ variables:
   PASEO_VOICE_MODE_ENABLED: "0"
 
 default:
-  image: node:22-bookworm
+  # Keep this image slim: the homelab Kubernetes runner has a bounded pod-start window,
+  # and cold pulls of the full Debian Node image can time out before scripts begin.
+  image: node:22-bookworm-slim
   interruptible: true
   before_script:
     - export PATH="$CI_PROJECT_DIR/.npm-global/bin:$PATH"
