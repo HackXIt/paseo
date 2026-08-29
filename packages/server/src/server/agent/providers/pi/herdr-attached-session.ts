@@ -382,9 +382,7 @@ export class HerdrAttachedPiSession implements AgentSession {
     return new Set(entries.slice(baselineIndex + 1).map((entry) => entry.entryId));
   }
 
-  private observeNativeProgressAfterSubmittedEntry(
-    entries: readonly { entryId: string }[],
-  ): void {
+  private observeNativeProgressAfterSubmittedEntry(entries: readonly { entryId: string }[]): void {
     const active = this.activeTurn;
     if (!active?.submittedNativeEntryId) {
       return;

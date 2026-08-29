@@ -3650,10 +3650,7 @@ export class AgentManager {
     await this.refreshRuntimeInfo(agent, options);
   }
 
-  private refreshSessionPersistence(
-    agent: ActiveManagedAgent,
-    event?: AgentStreamEvent,
-  ): boolean {
+  private refreshSessionPersistence(agent: ActiveManagedAgent, event?: AgentStreamEvent): boolean {
     if (
       this.blockedHerdrCursorAgents.has(agent.id) &&
       isHerdrAttachedPersistence(agent.persistence)
@@ -4173,9 +4170,16 @@ export class AgentManager {
     }
 
     let durable: Promise<boolean> = Promise.resolve(true);
-    this.recordAndDispatchTimelineItem(agent.id, event.item, event.provider, event.turnId, undefined, (task) => {
-      durable = task;
-    });
+    this.recordAndDispatchTimelineItem(
+      agent.id,
+      event.item,
+      event.provider,
+      event.turnId,
+      undefined,
+      (task) => {
+        durable = task;
+      },
+    );
     const timelineCommitted = await durable;
     if (!timelineCommitted && isHerdrAttachedPersistence(agent.persistence)) {
       this.blockedHerdrCursorAgents.add(agent.id);
@@ -4638,10 +4642,7 @@ export class AgentManager {
     this.trackBackgroundTask(task);
   }
 
-  private enqueueDurableTimelineAppend(
-    agentId: string,
-    row: AgentTimelineRow,
-  ): Promise<boolean> {
+  private enqueueDurableTimelineAppend(agentId: string, row: AgentTimelineRow): Promise<boolean> {
     if (!this.durableTimelineStore) {
       return Promise.resolve(true);
     }
@@ -4661,6 +4662,7 @@ export class AgentManager {
       if (committed && this.durableTimelineWrites.get(key) === task) {
         this.durableTimelineWrites.delete(key);
       }
+      return undefined;
     });
     this.trackBackgroundTask(task.then(() => undefined));
     return task;
@@ -4687,10 +4689,7 @@ export class AgentManager {
     return task;
   }
 
-  private enqueueDurableTimelineUpdate(
-    agentId: string,
-    row: AgentTimelineRow,
-  ): Promise<boolean> {
+  private enqueueDurableTimelineUpdate(agentId: string, row: AgentTimelineRow): Promise<boolean> {
     if (!this.durableTimelineStore) return Promise.resolve(true);
     const pendingAppend =
       this.durableTimelineWrites.get(this.durableTimelineWriteKey(agentId, row.seq)) ??
