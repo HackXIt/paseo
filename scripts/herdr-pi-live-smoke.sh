@@ -12,7 +12,7 @@ usage() {
 Usage:
   scripts/herdr-pi-live-smoke.sh prepare [--home PATH] [--herdr-session NAME] [--listen HOST:PORT]
   scripts/herdr-pi-live-smoke.sh dev-server [--home PATH] [--herdr-session NAME] [--listen HOST:PORT]
-  scripts/herdr-pi-live-smoke.sh pair [--home PATH] [--listen HOST:PORT] [--relay]
+  scripts/herdr-pi-live-smoke.sh pair [--home PATH] [--herdr-session NAME] [--listen HOST:PORT] [--relay]
 
 Prepare a disposable Paseo home for the Herdr-attached Pi live smoke.
 The helper only writes Paseo config and optionally starts/pairs the dev daemon.
@@ -67,8 +67,8 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-home="$(node -e 'const path = require("path"); console.log(path.resolve(process.argv[1]));' "$home")"
-normal_home="$(node -e 'const os = require("os"); const path = require("path"); console.log(path.resolve(os.homedir(), ".paseo"));')"
+home="$(node -e 'const fs = require("fs"); const path = require("path"); const resolved = path.resolve(process.argv[1]); console.log(fs.existsSync(resolved) ? fs.realpathSync(resolved) : resolved);' "$home")"
+normal_home="$(node -e 'const fs = require("fs"); const os = require("os"); const path = require("path"); const resolved = path.resolve(os.homedir(), ".paseo"); console.log(fs.existsSync(resolved) ? fs.realpathSync(resolved) : resolved);')"
 
 if [ "$home" = "$normal_home" ]; then
   echo "Refusing to use the normal Paseo home: $home" >&2
@@ -106,6 +106,7 @@ const config = {
       opencode: disabledProvider,
       omp: disabledProvider,
       mock: disabledProvider,
+      "mock-slow": disabledProvider,
     },
   },
 };
@@ -132,7 +133,7 @@ Config=$PASEO_HOME/config.json
 
 Next commands:
   scripts/herdr-pi-live-smoke.sh dev-server --home '$PASEO_HOME' --herdr-session '$herdr_session' --listen '$PASEO_LISTEN'
-  scripts/herdr-pi-live-smoke.sh pair --home '$PASEO_HOME' --listen '$PASEO_LISTEN' --relay
+  scripts/herdr-pi-live-smoke.sh pair --home '$PASEO_HOME' --herdr-session '$herdr_session' --listen '$PASEO_LISTEN' --relay
 
 Start a disposable Pi target in the named Herdr session yourself before importing it in Paseo.
 Do not import or prompt a real Firstmate/Pi session.
