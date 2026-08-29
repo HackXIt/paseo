@@ -4662,6 +4662,7 @@ export class AgentManager {
       if (committed && this.durableTimelineWrites.get(key) === task) {
         this.durableTimelineWrites.delete(key);
       }
+      return undefined;
     });
     this.trackBackgroundTask(task.then(() => undefined));
     return task;
