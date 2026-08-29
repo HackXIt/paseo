@@ -388,6 +388,8 @@ Paseo runs the `herdr` command and uses its default session. Set `params.herdr.c
 
 Use the live smoke only against a disposable Pi target started inside Herdr. Do not import or prompt a real Firstmate/Pi session.
 
+In the completed MVP live test, the captain imported a disposable Herdr-started Pi session from Paseo mobile. A prompt sent from mobile appeared in the Herdr terminal, and a prompt sent from the terminal synced back to mobile.
+
 `scripts/herdr-pi-live-smoke.sh` prepares a disposable `$PASEO_HOME` with only the built-in Pi provider enabled and Herdr discovery pointed at a named session. It refuses `~/.paseo`, so the helper does not change the user's normal providers.
 
 ```bash
@@ -429,11 +431,14 @@ The helper writes this provider shape into the disposable home:
       "copilot": { "enabled": false },
       "opencode": { "enabled": false },
       "omp": { "enabled": false },
-      "mock": { "enabled": false }
+      "mock": { "enabled": false },
+      "mock-slow": { "enabled": false }
     }
   }
 }
 ```
+
+The helper disables `mock-slow` because its intentionally hanging development probe would add unrelated noise to this focused live test.
 
 Run the smoke:
 
