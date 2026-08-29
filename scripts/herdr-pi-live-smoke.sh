@@ -67,8 +67,22 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-home="$(node -e 'const fs = require("fs"); const path = require("path"); const resolved = path.resolve(process.argv[1]); console.log(fs.existsSync(resolved) ? fs.realpathSync(resolved) : resolved);' "$home")"
-normal_home="$(node -e 'const fs = require("fs"); const os = require("os"); const path = require("path"); const resolved = path.resolve(os.homedir(), ".paseo"); console.log(fs.existsSync(resolved) ? fs.realpathSync(resolved) : resolved);')"
+canonicalize_path() {
+  node - "$1" <<'NODE'
+const fs = require("fs");
+const path = require("path");
+let ancestor = path.resolve(process.argv[2]);
+const suffix = [];
+while (!fs.existsSync(ancestor)) {
+  suffix.unshift(path.basename(ancestor));
+  ancestor = path.dirname(ancestor);
+}
+console.log(path.join(fs.realpathSync(ancestor), ...suffix));
+NODE
+}
+
+home="$(canonicalize_path "$home")"
+normal_home="$(canonicalize_path "$HOME/.paseo")"
 
 if [ "$home" = "$normal_home" ]; then
   echo "Refusing to use the normal Paseo home: $home" >&2
