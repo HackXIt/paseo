@@ -1,0 +1,116 @@
+# GitLab-only CI for the self-hosted mirror fork.
+#
+# This file intentionally lives on the protected `gitlab-ci` branch instead of
+# `main`, so self-hosted GitLab CI details do not pollute the GitHub fork that
+# can still upstream to getpaseo/paseo and downstream from GitHub cleanly.
+
+workflow:
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "gitlab-ci"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "api"'
+    - when: never
+
+stages:
+  - validate
+  - test
+
+variables:
+  ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+  ONNXRUNTIME_NODE_INSTALL: "skip"
+  NPM_CONFIG_CACHE: "$CI_PROJECT_DIR/.npm"
+  NPM_CONFIG_PREFIX: "$CI_PROJECT_DIR/.npm-global"
+  PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD: "0"
+  PASEO_DICTATION_ENABLED: "0"
+  PASEO_VOICE_MODE_ENABLED: "0"
+
+default:
+  image: node:22-bookworm
+  interruptible: true
+  before_script:
+    - export PATH="$CI_PROJECT_DIR/.npm-global/bin:$PATH"
+    - node --version
+    - npm --version
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - .npm/
+
+.install_deps: &install_deps
+  - node scripts/npm-retry.mjs ci
+
+.install_agent_clis: &install_agent_clis
+  - node scripts/npm-retry.mjs install -g @anthropic-ai/claude-code @openai/codex@0.105.0 opencode-ai
+
+format:
+  stage: validate
+  script:
+    - *install_deps
+    - npm run format:check
+
+lint:
+  stage: validate
+  script:
+    - *install_deps
+    - npx --yes lockfile-lint --path package-lock.json --type npm --allowed-hosts npm --validate-https --validate-integrity
+    - npm audit signatures
+    - npm run lint
+
+ci-contracts:
+  stage: validate
+  script:
+    - *install_deps
+    - node --test scripts/ci-workflow.test.mjs scripts/daemon-launch-contract.test.mjs scripts/sync-fdroid-changelogs.test.mjs
+
+typecheck:
+  stage: test
+  script:
+    - *install_deps
+    - npm run build:server
+    - npm run typecheck
+    - npm pack --dry-run --ignore-scripts --workspace=@getpaseo/protocol
+    - npm pack --dry-run --ignore-scripts --workspace=@getpaseo/client
+    - npm pack --dry-run --ignore-scripts --workspace=@getpaseo/server
+
+server-tests:
+  stage: test
+  script:
+    - git fetch --no-tags origin main:refs/remotes/origin/main || true
+    - *install_deps
+    - *install_agent_clis
+    - npm run build:server-deps
+    - npm run test --workspace=@getpaseo/server
+
+cli-tests:
+  stage: test
+  parallel:
+    matrix:
+      - PASEO_CLI_TEST_SHARD: ["1", "2", "3"]
+        PASEO_CLI_TEST_SHARD_TOTAL: "3"
+  script:
+    - *install_deps
+    - *install_agent_clis
+    - npm run build:server
+    - npm run test --workspace=@getpaseo/cli
+
+relay-tests:
+  stage: test
+  script:
+    - *install_deps
+    - npm run build:relay
+    - npm run test --workspace=@getpaseo/relay
+
+sdk-tests:
+  stage: test
+  script:
+    - *install_deps
+    - npm run build:client
+    - npm run test --workspace=@getpaseo/protocol
+    - npm run test --workspace=@getpaseo/client
+    - npm run test --workspace=@getpaseo/highlight
+    - npm run typecheck:examples --workspace=@getpaseo/client
