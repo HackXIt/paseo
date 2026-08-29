@@ -42,6 +42,10 @@ default:
         - package-lock.json
     paths:
       - .npm/
+  retry:
+    max: 1
+    when:
+      - runner_system_failure
 
 .install_deps: &install_deps
   - node scripts/npm-retry.mjs ci
@@ -50,12 +54,18 @@ default:
   - node scripts/npm-retry.mjs install -g @anthropic-ai/claude-code @openai/codex@0.105.0 opencode-ai
 
 format:
+  # The homelab Kubernetes runner can start small jobs reliably, but concurrent
+  # Paseo npm installs have been OOM-killed. Keep node-heavy jobs serialized.
+  resource_group: paseo-node-ci
   stage: validate
   script:
     - *install_deps
     - npm run format:check
 
 lint:
+  # The homelab Kubernetes runner can start small jobs reliably, but concurrent
+  # Paseo npm installs have been OOM-killed. Keep node-heavy jobs serialized.
+  resource_group: paseo-node-ci
   stage: validate
   script:
     - *install_deps
@@ -64,12 +74,18 @@ lint:
     - npm run lint
 
 ci-contracts:
+  # The homelab Kubernetes runner can start small jobs reliably, but concurrent
+  # Paseo npm installs have been OOM-killed. Keep node-heavy jobs serialized.
+  resource_group: paseo-node-ci
   stage: validate
   script:
     - *install_deps
     - node --test scripts/ci-workflow.test.mjs scripts/daemon-launch-contract.test.mjs scripts/sync-fdroid-changelogs.test.mjs
 
 typecheck:
+  # The homelab Kubernetes runner can start small jobs reliably, but concurrent
+  # Paseo npm installs have been OOM-killed. Keep node-heavy jobs serialized.
+  resource_group: paseo-node-ci
   stage: test
   script:
     - *install_deps
@@ -80,6 +96,9 @@ typecheck:
     - npm pack --dry-run --ignore-scripts --workspace=@getpaseo/server
 
 server-tests:
+  # The homelab Kubernetes runner can start small jobs reliably, but concurrent
+  # Paseo npm installs have been OOM-killed. Keep node-heavy jobs serialized.
+  resource_group: paseo-node-ci
   stage: test
   script:
     - git fetch --no-tags origin main:refs/remotes/origin/main || true
@@ -89,6 +108,9 @@ server-tests:
     - npm run test --workspace=@getpaseo/server
 
 cli-tests:
+  # The homelab Kubernetes runner can start small jobs reliably, but concurrent
+  # Paseo npm installs have been OOM-killed. Keep node-heavy jobs serialized.
+  resource_group: paseo-node-ci
   stage: test
   parallel:
     matrix:
@@ -101,6 +123,9 @@ cli-tests:
     - npm run test --workspace=@getpaseo/cli
 
 relay-tests:
+  # The homelab Kubernetes runner can start small jobs reliably, but concurrent
+  # Paseo npm installs have been OOM-killed. Keep node-heavy jobs serialized.
+  resource_group: paseo-node-ci
   stage: test
   script:
     - *install_deps
@@ -108,6 +133,9 @@ relay-tests:
     - npm run test --workspace=@getpaseo/relay
 
 sdk-tests:
+  # The homelab Kubernetes runner can start small jobs reliably, but concurrent
+  # Paseo npm installs have been OOM-killed. Keep node-heavy jobs serialized.
+  resource_group: paseo-node-ci
   stage: test
   script:
     - *install_deps
