@@ -6,8 +6,11 @@ export interface HerdrAgent {
   name?: string;
   kind: string | null;
   status: string | null;
+  ownStatus?: string;
   cwd: string | null;
   paneId?: string;
+  herdrWorkspaceId?: string;
+  parentTarget?: string;
   nativeSessionId: string | null;
   nativeSessionFile: string | null;
   lastActivityAt: Date | null;
@@ -174,6 +177,27 @@ function parseHerdrAgentRecord(value: unknown): HerdrAgent | null {
   const id = readString(value, "id");
   const name = readString(value, "name");
   const paneId = readFirstString(value, ["paneId", "pane_id"]);
+  const tabId = readFirstString(value, ["tabId", "tab_id"]);
+  const herdrWorkspaceId =
+    readFirstString(value, [
+      "herdrWorkspaceId",
+      "herdr_workspace_id",
+      "workspaceId",
+      "workspace_id",
+    ]) ?? (tabId ? parseWorkspaceIdFromHerdrId(tabId) : null);
+  const parentTarget = readFirstString(value, [
+    "parentTarget",
+    "parent_target",
+    "parentPaneId",
+    "parent_pane_id",
+    "parentId",
+    "parent_id",
+  ]);
+  const aggregateStatus = readFirstString(value, ["status", "lifecycle", "state"]);
+  const agentStatus = readString(value, "agent_status");
+  const ownStatus =
+    readFirstString(value, ["ownStatus", "own_status", "selfStatus", "self_status"]) ??
+    (aggregateStatus && agentStatus ? agentStatus : null);
   const nativeSessionFile = readFirstString(
     value,
     ["nativeSessionFile", "native_session_file", "session_file", "sessionFile"],
@@ -185,7 +209,8 @@ function parseHerdrAgentRecord(value: unknown): HerdrAgent | null {
     ...(id ? { id } : {}),
     ...(name ? { name } : {}),
     kind: readFirstString(value, ["kind", "agent_kind", "agent", "provider", "type"]),
-    status: readFirstString(value, ["status", "agent_status", "lifecycle", "state"]),
+    status: aggregateStatus ?? agentStatus,
+    ...(ownStatus ? { ownStatus } : {}),
     cwd: readFirstString(
       value,
       ["foreground_cwd", "cwd", "working_directory", "workingDirectory"],
@@ -193,6 +218,8 @@ function parseHerdrAgentRecord(value: unknown): HerdrAgent | null {
       ["cwd"],
     ),
     ...(paneId ? { paneId } : {}),
+    ...(herdrWorkspaceId ? { herdrWorkspaceId } : {}),
+    ...(parentTarget ? { parentTarget } : {}),
     nativeSessionId:
       readFirstString(value, ["nativeSessionId", "native_session_id", "session_id"], agentSession, [
         "id",
@@ -253,6 +280,10 @@ function readDate(value: unknown, key: string): Date | null {
   }
   const date = new Date(field);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function parseWorkspaceIdFromHerdrId(value: string): string | null {
+  return value.split(":").find((part) => /^w[0-9A-Za-z]+$/u.test(part)) ?? null;
 }
 
 function derivePiSessionIdFromFile(sessionFile: string | null): string | null {

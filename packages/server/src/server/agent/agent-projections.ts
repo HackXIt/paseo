@@ -284,6 +284,7 @@ export function toRecentProviderSessionDescriptorPayload(
     firstPromptPreview: session.firstPromptPreview,
     lastPromptPreview: session.lastPromptPreview,
     lastActivityAt: session.lastActivityAt.toISOString(),
+    ...(session.relatedToRequestedCwd ? { relatedToRequestedCwd: true } : {}),
   };
 }
 

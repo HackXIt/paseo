@@ -11,6 +11,11 @@ import type { AgentPersistenceHandle, AgentProvider } from "./agent-sdk-types.js
 import { ensureAgentLoaded, type AgentLoaderManager } from "./agent-loading.js";
 import { unarchiveAgentState } from "./agent-prompt.js";
 import { toRecentProviderSessionDescriptorPayload } from "./agent-projections.js";
+import {
+  parseHerdrAttachedPiHandle,
+  parseHerdrAttachedPiMetadata,
+  type HerdrAttachedPiMetadata,
+} from "./providers/pi/herdr-attachment.js";
 import type { WorkspaceProvisioningService } from "../session/workspace-provisioning/workspace-provisioning-service.js";
 import type { PersistedWorkspaceRecord } from "../workspace-registry.js";
 import type {
@@ -137,7 +142,7 @@ export async function listImportableProviderSessions(
   const candidates: ManagedImportableProviderSession[] = [];
   const matchesRequestCwd = request.cwd ? createRealpathAwarePathMatcher(request.cwd) : null;
   for (const session of sessions) {
-    if (matchesRequestCwd && !matchesRequestCwd(session.cwd)) {
+    if (matchesRequestCwd && !matchesRequestCwd(session.cwd) && !session.relatedToRequestedCwd) {
       continue;
     }
     if (sinceTimestamp !== null && session.lastActivityAt.getTime() < sinceTimestamp) {
@@ -170,18 +175,102 @@ export async function listImportableProviderSessions(
 export async function importProviderSession(
   input: ImportProviderSessionInput,
 ): Promise<ImportProviderSessionResult> {
-  const cwd = input.request.cwd;
+  const request = await withInferredImportLabels(input.request, input.agentStorage);
+  const importInput = request === input.request ? input : { ...input, request };
+  const cwd = request.cwd;
   if (!cwd) {
     throw new Error("Import requires cwd from the selected provider session");
   }
-  const key = await resolveProviderSessionImportMutationKey(input);
+  const key = await resolveProviderSessionImportMutationKey(importInput);
   return serializeProviderSessionImport(input.agentManager, key, async () => {
     const placement = await input.workspaceProvisioning.runInImportWorkspace(
-      { cwd, requestedWorkspaceId: input.request.workspaceId },
-      (workspace) => importProviderSessionNow(input, cwd, workspace.workspaceId),
+      { cwd, requestedWorkspaceId: request.workspaceId },
+      (workspace) => importProviderSessionNow(importInput, cwd, workspace.workspaceId),
     );
     return { ...placement.value, createdWorkspace: placement.createdWorkspace };
   });
+}
+
+async function withInferredImportLabels(
+  request: NormalizedImportAgentRequest,
+  agentStorage: Pick<AgentStorage, "list">,
+): Promise<NormalizedImportAgentRequest> {
+  if (getParentAgentIdFromLabels(request.labels)) {
+    return request;
+  }
+  const parentAgentId = await inferHerdrAttachedParentAgentId(request, agentStorage);
+  if (!parentAgentId) {
+    return request;
+  }
+  return {
+    ...request,
+    labels: { ...request.labels, [PARENT_AGENT_ID_LABEL]: parentAgentId },
+  };
+}
+
+async function inferHerdrAttachedParentAgentId(
+  request: NormalizedImportAgentRequest,
+  agentStorage: Pick<AgentStorage, "list">,
+): Promise<string | null> {
+  if (request.provider !== "pi") {
+    return null;
+  }
+  const child = parseHerdrAttachedPiHandle(request.providerHandleId);
+  if (!child) {
+    return null;
+  }
+  for (const record of await agentStorage.list()) {
+    if (record.archivedAt || record.provider !== request.provider) {
+      continue;
+    }
+    if (request.workspaceId && record.workspaceId !== request.workspaceId) {
+      continue;
+    }
+    const parent =
+      parseHerdrAttachedPiMetadata(record.persistence?.metadata) ??
+      (record.persistence ? parseHerdrAttachedPiHandle(record.persistence.sessionId) : null);
+    if (!parent || parent.nativeSessionId === child.nativeSessionId) {
+      continue;
+    }
+    if (isRelatedHerdrAttachment(child, parent)) {
+      return record.id;
+    }
+  }
+  return null;
+}
+
+function isRelatedHerdrAttachment(
+  child: HerdrAttachedPiMetadata,
+  parent: HerdrAttachedPiMetadata,
+): boolean {
+  if (child.herdrSession !== parent.herdrSession) {
+    return false;
+  }
+  if (
+    child.herdrParentTarget &&
+    collectHerdrAttachmentKeys(parent).includes(child.herdrParentTarget)
+  ) {
+    return true;
+  }
+  const childWorkspaceId = getHerdrAttachmentWorkspaceId(child);
+  const parentWorkspaceId = getHerdrAttachmentWorkspaceId(parent);
+  return Boolean(childWorkspaceId && parentWorkspaceId && childWorkspaceId === parentWorkspaceId);
+}
+
+function collectHerdrAttachmentKeys(metadata: HerdrAttachedPiMetadata): string[] {
+  return [metadata.herdrTarget, metadata.herdrAlias, metadata.herdrPaneId].filter(
+    (value): value is string => typeof value === "string" && value.length > 0,
+  );
+}
+
+function getHerdrAttachmentWorkspaceId(metadata: HerdrAttachedPiMetadata): string | null {
+  return (
+    metadata.herdrWorkspaceId ?? parseHerdrWorkspaceId(metadata.herdrPaneId ?? metadata.herdrTarget)
+  );
+}
+
+function parseHerdrWorkspaceId(value: string): string | null {
+  return value.split(":").find((part) => /^w[0-9A-Za-z]+$/u.test(part)) ?? null;
 }
 
 async function importProviderSessionNow(

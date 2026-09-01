@@ -277,6 +277,7 @@ export function ImportSessionSheet({
     enabled: visible,
   });
   const supportsWorkspaceTarget = useHostFeature(serverId, "importSessionWorkspaceTarget");
+  const supportsRelatedCwd = useHostFeature(serverId, "importSessionRelatedCwd");
   const requiresHostUpgrade = requiresImportSessionsHostUpgrade({
     supportsSnapshot,
     workspaceId,
@@ -414,11 +415,15 @@ export function ImportSessionSheet({
       if (!entry.cwd) {
         throw new Error("Session is missing a working directory");
       }
+      const targetWorkspaceId =
+        workspaceId && !(supportsRelatedCwd && entry.relatedToRequestedCwd === true)
+          ? workspaceId
+          : undefined;
       const agent = await client.importAgent({
         providerId: entry.providerId,
         providerHandleId: entry.providerHandleId,
         cwd: entry.cwd,
-        ...(workspaceId ? { workspaceId } : {}),
+        ...(targetWorkspaceId ? { workspaceId: targetWorkspaceId } : {}),
       });
       return agent;
     },

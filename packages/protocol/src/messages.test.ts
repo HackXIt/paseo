@@ -336,6 +336,7 @@ describe("agent detach RPC", () => {
       serverId: "srv-test",
       features: {
         importSessionWorkspaceTarget: true,
+        importSessionRelatedCwd: true,
       },
     });
 
@@ -343,6 +344,7 @@ describe("agent detach RPC", () => {
       throw new Error("Expected server info payload to parse");
     }
     expect(parsed.features?.importSessionWorkspaceTarget).toBe(true);
+    expect(parsed.features?.importSessionRelatedCwd).toBe(true);
   });
 });
 

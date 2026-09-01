@@ -134,6 +134,60 @@ export const PiProviderParamsSchema = z
 
 type PiProviderParams = z.infer<typeof PiProviderParamsSchema>;
 
+interface HerdrImportableSessionCandidate {
+  agent: HerdrAgent;
+  session: ImportableProviderSession;
+}
+
+interface HerdrRelatedImportScope {
+  targetKeys: ReadonlySet<string>;
+  workspaceIds: ReadonlySet<string>;
+}
+
+function createHerdrRelatedImportScope(
+  agents: readonly HerdrAgent[],
+  matchesCwd: (cwd: string) => boolean,
+): HerdrRelatedImportScope {
+  const targetKeys = new Set<string>();
+  const workspaceIds = new Set<string>();
+  for (const agent of agents) {
+    if (!isAttachableHerdrPiAgent(agent) || !agent.cwd || !matchesCwd(agent.cwd)) {
+      continue;
+    }
+    for (const key of collectHerdrTargetKeys(agent)) {
+      targetKeys.add(key);
+    }
+    const workspaceId = getHerdrWorkspaceId(agent);
+    if (workspaceId) {
+      workspaceIds.add(workspaceId);
+    }
+  }
+  return { targetKeys, workspaceIds };
+}
+
+function isHerdrAgentRelatedToScope(agent: HerdrAgent, scope: HerdrRelatedImportScope): boolean {
+  const parentTarget = agent.parentTarget;
+  if (parentTarget && scope.targetKeys.has(parentTarget)) {
+    return true;
+  }
+  const workspaceId = getHerdrWorkspaceId(agent);
+  return Boolean(workspaceId && scope.workspaceIds.has(workspaceId));
+}
+
+function collectHerdrTargetKeys(agent: HerdrAgent): string[] {
+  return [agent.target, agent.id, agent.name, agent.paneId].filter(
+    (value): value is string => typeof value === "string" && value.length > 0,
+  );
+}
+
+function getHerdrWorkspaceId(agent: HerdrAgent): string | null {
+  return agent.herdrWorkspaceId ?? parseWorkspaceIdFromHerdrId(agent.paneId ?? agent.target);
+}
+
+function parseWorkspaceIdFromHerdrId(value: string): string | null {
+  return value.split(":").find((part) => /^w[0-9A-Za-z]+$/u.test(part)) ?? null;
+}
+
 const PI_HANDLED_BUILTIN_SLASH_COMMANDS: AgentSlashCommand[] = [
   {
     name: "compact",
@@ -2691,23 +2745,35 @@ export class PiRpcAgentClient implements AgentClient {
     }
 
     const matchesCwd = options?.cwd ? createRealpathAwarePathMatcher(options.cwd) : null;
+    const relatedScope = matchesCwd ? createHerdrRelatedImportScope(agents, matchesCwd) : null;
     const rows: ImportableProviderSession[] = [];
     for (const agent of agents) {
-      const row = await this.toHerdrImportableSession(agent).catch((error) => {
+      const candidate = await this.toHerdrImportableSession(agent).catch((error) => {
         this.logger.debug({ err: error, target: agent.target }, "Failed to inspect Herdr Pi agent");
         return null;
       });
-      if (!row || (matchesCwd && !matchesCwd(row.cwd))) {
+      if (!candidate) {
         continue;
       }
-      rows.push(row);
+      const relatedToRequestedCwd = Boolean(
+        matchesCwd &&
+        !matchesCwd(candidate.session.cwd) &&
+        relatedScope &&
+        isHerdrAgentRelatedToScope(candidate.agent, relatedScope),
+      );
+      if (matchesCwd && !matchesCwd(candidate.session.cwd) && !relatedToRequestedCwd) {
+        continue;
+      }
+      rows.push(
+        relatedToRequestedCwd ? { ...candidate.session, relatedToRequestedCwd } : candidate.session,
+      );
     }
     return rows;
   }
 
   private async toHerdrImportableSession(
     agent: HerdrAgent,
-  ): Promise<ImportableProviderSession | null> {
+  ): Promise<HerdrImportableSessionCandidate | null> {
     if (!this.herdrClient) {
       return null;
     }
@@ -2724,12 +2790,15 @@ export class PiRpcAgentClient implements AgentClient {
     }
 
     const history = await readPiNativeHistory(nativeSessionFile);
+    const herdrWorkspaceId = getHerdrWorkspaceId(detailed);
     const metadata: HerdrAttachedPiMetadata = {
       runtime: HERDR_ATTACHED_PI_RUNTIME,
       herdrSession: this.providerParams.herdr.session ?? "default",
       herdrTarget: detailed.target,
       ...(detailed.name ? { herdrAlias: detailed.name } : {}),
       ...(detailed.paneId ? { herdrPaneId: detailed.paneId } : {}),
+      ...(herdrWorkspaceId ? { herdrWorkspaceId } : {}),
+      ...(detailed.parentTarget ? { herdrParentTarget: detailed.parentTarget } : {}),
       nativeSessionId,
       nativeSessionFile,
       cwd,
@@ -2740,12 +2809,15 @@ export class PiRpcAgentClient implements AgentClient {
 
     const label = detailed.name ?? detailed.target;
     return {
-      providerHandleId: encodeHerdrAttachedPiHandle(metadata),
-      cwd: metadata.cwd,
-      title: `Live Pi: ${label}`,
-      firstPromptPreview: null,
-      lastPromptPreview: detailed.status ? `Herdr ${detailed.status}` : "Herdr live Pi",
-      lastActivityAt: history.lastActivityAt ?? detailed.lastActivityAt ?? new Date(),
+      agent: detailed,
+      session: {
+        providerHandleId: encodeHerdrAttachedPiHandle(metadata),
+        cwd: metadata.cwd,
+        title: `Live Pi: ${label}`,
+        firstPromptPreview: null,
+        lastPromptPreview: detailed.status ? `Herdr ${detailed.status}` : "Herdr live Pi",
+        lastActivityAt: history.lastActivityAt ?? detailed.lastActivityAt ?? new Date(),
+      },
     };
   }
 

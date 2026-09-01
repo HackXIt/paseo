@@ -10,7 +10,12 @@ import type {
 import { AgentStorage, type StoredAgentRecord } from "./agent-storage.js";
 import type { FetchRecentProviderSessionsRequestMessage } from "@getpaseo/protocol/messages";
 import { PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/agent-labels";
-import type { AgentTimelineItem } from "./agent-sdk-types.js";
+import type { AgentMetadata, AgentTimelineItem } from "./agent-sdk-types.js";
+import {
+  HERDR_ATTACHED_PI_RUNTIME,
+  encodeHerdrAttachedPiHandle,
+  type HerdrAttachedPiMetadata,
+} from "./providers/pi/herdr-attachment.js";
 import { createPersistedWorkspaceRecord } from "../workspace-registry.js";
 import type { WorkspaceProvisioningService } from "../session/workspace-provisioning/workspace-provisioning-service.js";
 import { createTestLogger } from "../../test-utils/test-logger.js";
@@ -53,6 +58,7 @@ function makeImportableSession(args: {
   lastActivityAt: string;
   firstPrompt?: string;
   lastPrompt?: string;
+  relatedToRequestedCwd?: boolean;
 }): ManagedImportableProviderSession {
   const provider = args.provider ?? "codex";
   const cwd = args.cwd ?? "/tmp/project";
@@ -64,6 +70,7 @@ function makeImportableSession(args: {
     lastActivityAt: new Date(args.lastActivityAt),
     firstPromptPreview: args.firstPrompt ?? null,
     lastPromptPreview: args.lastPrompt ?? args.firstPrompt ?? null,
+    ...(args.relatedToRequestedCwd ? { relatedToRequestedCwd: true } : {}),
   };
 }
 
@@ -271,6 +278,51 @@ test("listImportableProviderSessions filters, sorts, limits, and projects import
       },
     ],
   });
+});
+
+test("listImportableProviderSessions keeps provider-related live sessions outside the requested cwd", async () => {
+  const cwd = "/tmp/project";
+  const sessions = [
+    makeImportableSession({
+      provider: "pi",
+      sessionId: "related-worker",
+      cwd: "/tmp/worker-project",
+      title: "Live Pi: worker",
+      lastActivityAt: "2026-04-30T12:05:00.000Z",
+      relatedToRequestedCwd: true,
+    }),
+    makeImportableSession({
+      provider: "pi",
+      sessionId: "unrelated-outside-cwd",
+      cwd: "/tmp/elsewhere",
+      title: "Live Pi: unrelated",
+      lastActivityAt: "2026-04-30T12:04:00.000Z",
+    }),
+  ];
+
+  const result = await listImportableProviderSessions({
+    request: makeRequest({ cwd, providers: ["pi"], limit: 10 }),
+    agentManager: {
+      listAgents: () => [],
+      listImportableSessions: vi.fn(async () => sessions),
+    },
+    agentStorage: { list: async () => [] },
+    providerSnapshotManager: { getProviderLabel: () => "Pi" },
+  });
+
+  expect(result.entries).toEqual([
+    {
+      providerId: "pi",
+      providerLabel: "Pi",
+      providerHandleId: "related-worker",
+      cwd: "/tmp/worker-project",
+      title: "Live Pi: worker",
+      firstPromptPreview: null,
+      lastPromptPreview: null,
+      lastActivityAt: "2026-04-30T12:05:00.000Z",
+      relatedToRequestedCwd: true,
+    },
+  ]);
 });
 
 test("listImportableProviderSessions looks past already-imported rows to fill the requested limit", async () => {
@@ -518,16 +570,19 @@ test("normalizeImportAgentRequest accepts new and legacy import handle shapes", 
 
 function makeStoredProviderSession(input: {
   id: string;
+  provider?: string;
   cwd: string;
   sessionId: string;
   nativeHandle?: string;
   workspaceId?: string;
   labels?: Record<string, string>;
+  metadata?: AgentMetadata;
   archivedAt?: string | null;
 }): StoredAgentRecord {
+  const provider = input.provider ?? "codex";
   return {
     id: input.id,
-    provider: "codex",
+    provider,
     cwd: input.cwd,
     workspaceId: input.workspaceId ?? "ws-archived",
     createdAt: "2026-04-30T10:00:00.000Z",
@@ -535,12 +590,12 @@ function makeStoredProviderSession(input: {
     lastActivityAt: "2026-04-30T10:30:00.000Z",
     lastUserMessageAt: null,
     labels: input.labels ?? {},
-    config: { provider: "codex", cwd: input.cwd },
+    config: { provider, cwd: input.cwd },
     persistence: {
-      provider: "codex",
+      provider,
       sessionId: input.sessionId,
       nativeHandle: input.nativeHandle ?? input.sessionId,
-      metadata: { provider: "codex", cwd: input.cwd },
+      metadata: input.metadata ?? { provider, cwd: input.cwd },
     },
     archivedAt: input.archivedAt === undefined ? "2026-04-30T12:00:00.000Z" : input.archivedAt,
   };
@@ -597,7 +652,7 @@ class ProviderImportHarness {
       },
       notifyAgentState: () => {},
       getAgent: () => this.activeAgent,
-      getRegisteredProviderIds: () => ["codex"],
+      getRegisteredProviderIds: () => [this.snapshot.provider],
       createAgent: async () => {
         throw new Error("Stored provider imports must resume their persisted session");
       },
@@ -636,6 +691,7 @@ class ProviderImportHarness {
   static async create(
     input: {
       id?: string;
+      provider?: string;
       cwd?: string;
       sessionId?: string;
       nativeHandle?: string;
@@ -645,11 +701,12 @@ class ProviderImportHarness {
     importTestDirectories.push(directory);
     const storage = new AgentStorage(path.join(directory, "agents"), createTestLogger());
     await storage.initialize();
+    const provider = input.provider ?? "codex";
     const cwd = input.cwd ?? "/tmp/imported-agent";
     const sessionId = input.sessionId ?? "thread-imported";
     const snapshot = makeManagedAgent({
       id: input.id,
-      provider: "codex",
+      provider,
       cwd,
       sessionId,
       nativeHandle: input.nativeHandle,
@@ -672,13 +729,19 @@ class ProviderImportHarness {
     };
   }
 
-  import(input: { providerHandleId: string; cwd?: string; labels?: Record<string, string> }) {
+  import(input: {
+    providerHandleId: string;
+    cwd?: string;
+    labels?: Record<string, string>;
+    workspaceId?: string;
+  }) {
     return importProviderSession({
       request: {
         requestId: "import-thread",
-        provider: "codex",
+        provider: this.snapshot.provider,
         providerHandleId: input.providerHandleId,
         cwd: input.cwd,
+        workspaceId: input.workspaceId,
         labels: input.labels,
       },
       workspaceProvisioning: createImportWorkspace("ws-restored"),
@@ -716,6 +779,60 @@ test("importProviderSession uses the provider import path with the requested lab
     timelineSize: 2,
     createdWorkspace: null,
   });
+});
+
+test("importProviderSession stamps a related Herdr worker with its parent agent label", async () => {
+  const parentMetadata: HerdrAttachedPiMetadata = {
+    runtime: HERDR_ATTACHED_PI_RUNTIME,
+    herdrSession: "fm-lab-session",
+    herdrTarget: "w2D:pA",
+    herdrAlias: "firstmate",
+    herdrPaneId: "w2D:pA",
+    nativeSessionId: "parent-native-session",
+    nativeSessionFile: "/tmp/parent.jsonl",
+    cwd: "/tmp/parent-workspace",
+  };
+  const workerMetadata: HerdrAttachedPiMetadata = {
+    runtime: HERDR_ATTACHED_PI_RUNTIME,
+    herdrSession: "fm-lab-session",
+    herdrTarget: "w2D:pC",
+    herdrAlias: "worker",
+    herdrPaneId: "w2D:pC",
+    nativeSessionId: "worker-native-session",
+    nativeSessionFile: "/tmp/worker.jsonl",
+    cwd: "/tmp/worker-worktree",
+  };
+  const workerHandle = encodeHerdrAttachedPiHandle(workerMetadata);
+  const harness = await ProviderImportHarness.create({
+    provider: "pi",
+    sessionId: workerHandle,
+    nativeHandle: workerMetadata.nativeSessionFile,
+    cwd: workerMetadata.cwd,
+  });
+  await harness.seed(
+    makeStoredProviderSession({
+      id: "parent-agent",
+      provider: "pi",
+      cwd: parentMetadata.cwd,
+      workspaceId: "parent-workspace",
+      sessionId: encodeHerdrAttachedPiHandle(parentMetadata),
+      nativeHandle: parentMetadata.nativeSessionFile,
+      metadata: parentMetadata,
+      archivedAt: null,
+    }),
+  );
+
+  await harness.import({ providerHandleId: workerHandle, cwd: workerMetadata.cwd });
+
+  expect(harness.freshImports).toEqual([
+    {
+      provider: "pi",
+      providerHandleId: workerHandle,
+      cwd: workerMetadata.cwd,
+      workspaceId: "ws-restored",
+      labels: { [PARENT_AGENT_ID_LABEL]: "parent-agent" },
+    },
+  ]);
 });
 
 test("importProviderSession rejects a provider session with an active stored owner", async () => {
