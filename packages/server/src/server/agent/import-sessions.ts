@@ -243,34 +243,19 @@ function isRelatedHerdrAttachment(
   child: HerdrAttachedPiMetadata,
   parent: HerdrAttachedPiMetadata,
 ): boolean {
-  if (child.herdrSession !== parent.herdrSession) {
-    return false;
-  }
-  if (
-    child.herdrParentTarget &&
-    collectHerdrAttachmentKeys(parent).includes(child.herdrParentTarget)
-  ) {
-    return true;
-  }
-  const childWorkspaceId = getHerdrAttachmentWorkspaceId(child);
-  const parentWorkspaceId = getHerdrAttachmentWorkspaceId(parent);
-  return Boolean(childWorkspaceId && parentWorkspaceId && childWorkspaceId === parentWorkspaceId);
+  return (
+    child.herdrSession === parent.herdrSession &&
+    Boolean(
+      child.herdrParentTarget &&
+        collectHerdrAttachmentKeys(parent).includes(child.herdrParentTarget),
+    )
+  );
 }
 
 function collectHerdrAttachmentKeys(metadata: HerdrAttachedPiMetadata): string[] {
   return [metadata.herdrTarget, metadata.herdrAlias, metadata.herdrPaneId].filter(
     (value): value is string => typeof value === "string" && value.length > 0,
   );
-}
-
-function getHerdrAttachmentWorkspaceId(metadata: HerdrAttachedPiMetadata): string | null {
-  return (
-    metadata.herdrWorkspaceId ?? parseHerdrWorkspaceId(metadata.herdrPaneId ?? metadata.herdrTarget)
-  );
-}
-
-function parseHerdrWorkspaceId(value: string): string | null {
-  return value.split(":").find((part) => /^w[0-9A-Za-z]+$/u.test(part)) ?? null;
 }
 
 async function importProviderSessionNow(

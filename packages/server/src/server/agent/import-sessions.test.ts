@@ -798,6 +798,7 @@ test("importProviderSession stamps a related Herdr worker with its parent agent 
     herdrTarget: "w2D:pC",
     herdrAlias: "worker",
     herdrPaneId: "w2D:pC",
+    herdrParentTarget: "w2D:pA",
     nativeSessionId: "worker-native-session",
     nativeSessionFile: "/tmp/worker.jsonl",
     cwd: "/tmp/worker-worktree",
@@ -831,6 +832,63 @@ test("importProviderSession stamps a related Herdr worker with its parent agent 
       cwd: workerMetadata.cwd,
       workspaceId: "ws-restored",
       labels: { [PARENT_AGENT_ID_LABEL]: "parent-agent" },
+    },
+  ]);
+});
+
+test("importProviderSession does not infer a parent from a shared Herdr workspace", async () => {
+  const workerMetadata: HerdrAttachedPiMetadata = {
+    runtime: HERDR_ATTACHED_PI_RUNTIME,
+    herdrSession: "fm-lab-session",
+    herdrTarget: "w2D:pC",
+    herdrAlias: "worker",
+    herdrPaneId: "w2D:pC",
+    herdrWorkspaceId: "w2D",
+    herdrParentTarget: "w2D:pA",
+    nativeSessionId: "worker-native-session",
+    nativeSessionFile: "/tmp/worker.jsonl",
+    cwd: "/tmp/worker-worktree",
+  };
+  const parentMetadata: HerdrAttachedPiMetadata = {
+    runtime: HERDR_ATTACHED_PI_RUNTIME,
+    herdrSession: "fm-lab-session",
+    herdrTarget: "w2D:pA",
+    herdrAlias: "firstmate",
+    herdrPaneId: "w2D:pA",
+    herdrWorkspaceId: "w2D",
+    nativeSessionId: "parent-native-session",
+    nativeSessionFile: "/tmp/parent.jsonl",
+    cwd: "/tmp/parent-workspace",
+  };
+  const parentHandle = encodeHerdrAttachedPiHandle(parentMetadata);
+  const harness = await ProviderImportHarness.create({
+    provider: "pi",
+    sessionId: parentHandle,
+    nativeHandle: parentMetadata.nativeSessionFile,
+    cwd: parentMetadata.cwd,
+  });
+  await harness.seed(
+    makeStoredProviderSession({
+      id: "worker-agent",
+      provider: "pi",
+      cwd: workerMetadata.cwd,
+      workspaceId: "parent-workspace",
+      sessionId: encodeHerdrAttachedPiHandle(workerMetadata),
+      nativeHandle: workerMetadata.nativeSessionFile,
+      metadata: workerMetadata,
+      archivedAt: null,
+    }),
+  );
+
+  await harness.import({ providerHandleId: parentHandle, cwd: parentMetadata.cwd });
+
+  expect(harness.freshImports).toEqual([
+    {
+      provider: "pi",
+      providerHandleId: parentHandle,
+      cwd: parentMetadata.cwd,
+      workspaceId: "ws-restored",
+      labels: undefined,
     },
   ]);
 });
