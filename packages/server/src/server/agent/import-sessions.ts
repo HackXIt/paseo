@@ -247,7 +247,7 @@ function isRelatedHerdrAttachment(
     child.herdrSession === parent.herdrSession &&
     Boolean(
       child.herdrParentTarget &&
-        collectHerdrAttachmentKeys(parent).includes(child.herdrParentTarget),
+      collectHerdrAttachmentKeys(parent).includes(child.herdrParentTarget),
     )
   );
 }
