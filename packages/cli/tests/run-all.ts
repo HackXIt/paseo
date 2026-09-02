@@ -28,7 +28,9 @@ const testEnvDefaults = {
   PASEO_VOICE_MODE_ENABLED: process.env.PASEO_VOICE_MODE_ENABLED ?? "0",
 };
 
-const DEFAULT_CONCURRENCY = 4;
+// CI already runs three shards concurrently. Keeping one daemon-heavy test active
+// per shard avoids supervisor worker crashes under the shared process/memory limit.
+const DEFAULT_CONCURRENCY = 1;
 const concurrencyEnv = process.env.PASEO_CLI_TEST_CONCURRENCY;
 const parsedConcurrency = concurrencyEnv ? Number.parseInt(concurrencyEnv, 10) : NaN;
 const concurrency =
