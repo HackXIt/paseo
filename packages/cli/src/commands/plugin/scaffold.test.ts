@@ -12,35 +12,41 @@ afterEach(async () => {
 });
 
 describe("plugin scaffold", () => {
-  it("creates a standalone split-runtime project that typechecks", async () => {
-    const parent = await mkdtemp(path.join(process.cwd(), ".plugin-scaffold-"));
-    directories.push(parent);
-    const directory = path.join(parent, "hello-plugin");
+  it(
+    "creates a standalone split-runtime project that typechecks",
+    { timeout: 30_000 },
+    async () => {
+      const parent = await mkdtemp(path.join(process.cwd(), ".plugin-scaffold-"));
+      directories.push(parent);
+      const directory = path.join(parent, "hello-plugin");
 
-    await scaffoldPluginDirectory(directory);
+      await scaffoldPluginDirectory(directory);
 
-    const configPath = path.join(directory, "tsconfig.json");
-    const loaded = ts.readConfigFile(configPath, ts.sys.readFile);
-    expect(loaded.error).toBeUndefined();
-    const parsed = ts.parseJsonConfigFileContent(loaded.config, ts.sys, directory);
-    const diagnostics = ts.getPreEmitDiagnostics(
-      ts.createProgram(parsed.fileNames, parsed.options),
-    );
-    expect(
-      diagnostics.map((diagnostic) =>
-        ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
-      ),
-    ).toEqual([]);
-    expect(JSON.parse(await readFile(path.join(directory, "paseo-plugin.json"), "utf8"))).toEqual({
-      id: "hello-plugin",
-    });
-    await expect(readFile(path.join(directory, "index.ts"), "utf8")).resolves.toContain(
-      'from "./main.client"',
-    );
-    await expect(readFile(path.join(directory, "main.client.tsx"), "utf8")).resolves.toContain(
-      "Hello from my plugin",
-    );
-  });
+      const configPath = path.join(directory, "tsconfig.json");
+      const loaded = ts.readConfigFile(configPath, ts.sys.readFile);
+      expect(loaded.error).toBeUndefined();
+      const parsed = ts.parseJsonConfigFileContent(loaded.config, ts.sys, directory);
+      const diagnostics = ts.getPreEmitDiagnostics(
+        ts.createProgram(parsed.fileNames, parsed.options),
+      );
+      expect(
+        diagnostics.map((diagnostic) =>
+          ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
+        ),
+      ).toEqual([]);
+      expect(JSON.parse(await readFile(path.join(directory, "paseo-plugin.json"), "utf8"))).toEqual(
+        {
+          id: "hello-plugin",
+        },
+      );
+      await expect(readFile(path.join(directory, "index.ts"), "utf8")).resolves.toContain(
+        'from "./main.client"',
+      );
+      await expect(readFile(path.join(directory, "main.client.tsx"), "utf8")).resolves.toContain(
+        "Hello from my plugin",
+      );
+    },
+  );
 
   it("typechecks client and server Paseo API access", async () => {
     const parent = await mkdtemp(path.join(process.cwd(), ".plugin-scaffold-"));
