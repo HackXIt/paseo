@@ -311,7 +311,8 @@ describe("Herdr attached Pi sessions", () => {
 
   test("delivers uploaded files as explicit file-reference downgrades", async () => {
     const { file, metadata } = await createAttachment();
-    const uploadedPath = path.join(path.dirname(file), "uploads", "notes.txt");
+    const uploadsRoot = path.join(path.dirname(file), "uploads");
+    const uploadedPath = path.join(uploadsRoot, "upload_notes", "notes.txt");
     await mkdir(path.dirname(uploadedPath), { recursive: true });
     await writeFile(uploadedPath, "attachment contents", "utf8");
     const herdr = new FakeHerdrClient();
@@ -321,6 +322,7 @@ describe("Herdr attached Pi sessions", () => {
       metadata,
       config: { cwd: metadata.cwd },
       pollIntervalMs: 60_000,
+      uploadsRoot,
     });
 
     await session.startTurn([
@@ -350,6 +352,39 @@ describe("Herdr attached Pi sessions", () => {
         ].join("\n"),
       },
     ]);
+  });
+
+  test("rejects uploaded files outside Paseo upload storage", async () => {
+    const { file, metadata } = await createAttachment();
+    const unsafePath = path.join(path.dirname(file), "outside.txt");
+    const uploadsRoot = path.join(path.dirname(file), "uploads");
+    await mkdir(uploadsRoot, { recursive: true });
+    await writeFile(unsafePath, "host data", "utf8");
+    const herdr = new FakeHerdrClient();
+    herdr.agents = [validHerdrAgent(metadata, file)];
+    const session = new HerdrAttachedPiSession({
+      herdrClient: herdr,
+      metadata,
+      config: { cwd: metadata.cwd },
+      pollIntervalMs: 60_000,
+      uploadsRoot,
+    });
+
+    await expect(
+      session.startTurn([
+        { type: "text", text: "Read this file." },
+        {
+          type: "uploaded_file",
+          id: "upload_outside",
+          fileName: "outside.txt",
+          mimeType: "text/plain",
+          size: 9,
+          path: unsafePath,
+        },
+      ]),
+    ).rejects.toThrow("Uploaded file path is not a trusted Paseo upload");
+    expect(herdr.prompts).toEqual([]);
+    await session.close();
   });
 
   test.each([

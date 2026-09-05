@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { realpath, stat } from "node:fs/promises";
+import { basename, dirname, join, relative, sep } from "node:path";
 
 import type {
   AgentCapabilityFlags,
@@ -29,6 +31,7 @@ import {
   type HerdrAttachedPiMetadata,
 } from "./herdr-attachment.js";
 import type { HerdrAgent, HerdrClient } from "./herdr-client.js";
+import { resolvePaseoHome } from "../../../paseo-home.js";
 import {
   mapPiNativeHistoryEvents,
   readPiNativeHistory,
@@ -71,6 +74,7 @@ interface HerdrAttachedPiSessionOptions {
   metadata: HerdrAttachedPiMetadata;
   config: { cwd: string; model?: string; thinkingOptionId?: string; modeId?: string };
   pollIntervalMs?: number;
+  uploadsRoot?: string;
 }
 
 interface ActiveTurn {
@@ -92,6 +96,7 @@ export class HerdrAttachedPiSession implements AgentSession {
   private readonly config: HerdrAttachedPiSessionOptions["config"];
   private metadata: HerdrAttachedPiMetadata;
   private readonly pollIntervalMs: number;
+  private readonly uploadsRoot: string;
   private pollTimer: NodeJS.Timeout | null = null;
   private pollInFlight = false;
   private closed = false;
@@ -105,6 +110,7 @@ export class HerdrAttachedPiSession implements AgentSession {
     this.metadata = toPersistedHerdrAttachedPiMetadata(options.metadata);
     this.config = options.config;
     this.pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+    this.uploadsRoot = options.uploadsRoot ?? join(resolvePaseoHome(), "uploads");
   }
 
   get id(): string | null {
@@ -139,7 +145,7 @@ export class HerdrAttachedPiSession implements AgentSession {
       throw new Error(`Herdr target ${this.metadata.herdrTarget} is already running`);
     }
 
-    const promptText = renderHerdrPrompt(prompt);
+    const promptText = await renderHerdrPrompt(prompt, this.uploadsRoot);
     const history = await readPiNativeHistory(this.metadata.nativeSessionFile);
     this.assertNativeHistoryMatches(history);
     const turnId = randomUUID();
@@ -505,36 +511,69 @@ export class HerdrAttachedPiSession implements AgentSession {
   }
 }
 
-function renderHerdrPrompt(prompt: AgentPromptInput): string {
+async function renderHerdrPrompt(prompt: AgentPromptInput, uploadsRoot: string): Promise<string> {
   if (typeof prompt === "string") {
     return prompt;
   }
-  return prompt
-    .map((block) => {
-      if (block.type === "text") {
-        return block.text;
-      }
-      if (block.type === "image") {
-        const image = validateHerdrImageAttachment(block);
-        const materialized = materializeProviderImage(image);
-        return [
+  const parts: string[] = [];
+  for (const block of prompt) {
+    if (block.type === "text") {
+      parts.push(block.text);
+    } else if (block.type === "image") {
+      const image = validateHerdrImageAttachment(block);
+      const materialized = materializeProviderImage(image);
+      parts.push(
+        [
           "[Image attachment downgraded to a file reference because Herdr-attached Pi prompt injection supports text only.]",
           `Saved path: ${materialized.path}`,
-        ].join("\n");
-      }
-      if (block.type === "uploaded_file") {
-        return [
+        ].join("\n"),
+      );
+    } else if (block.type === "uploaded_file") {
+      const uploadedPath = await validateHerdrUploadedFile(block, uploadsRoot);
+      parts.push(
+        [
           "[File attachment downgraded to a file reference because Herdr-attached Pi prompt injection supports text only.]",
           `File: ${block.fileName}`,
-          `Saved path: ${block.path}`,
+          `Saved path: ${uploadedPath}`,
           `MIME: ${block.mimeType}`,
           `Size: ${block.size} bytes`,
-        ].join("\n");
-      }
-      return renderPromptAttachmentAsText(block);
-    })
-    .filter((part) => part.trim().length > 0)
-    .join("\n\n");
+        ].join("\n"),
+      );
+    } else {
+      parts.push(renderPromptAttachmentAsText(block));
+    }
+  }
+  return parts.filter((part) => part.trim().length > 0).join("\n\n");
+}
+
+async function validateHerdrUploadedFile(
+  file: Extract<AgentPromptContentBlock, { type: "uploaded_file" }>,
+  uploadsRoot: string,
+): Promise<string> {
+  const [canonicalRoot, canonicalPath] = await Promise.all([
+    realpath(uploadsRoot).catch(() => null),
+    realpath(file.path).catch(() => null),
+  ]);
+  if (!canonicalRoot || !canonicalPath) {
+    throw new Error("Uploaded file is not available in Paseo upload storage");
+  }
+
+  const pathWithinRoot = relative(canonicalRoot, canonicalPath);
+  if (
+    pathWithinRoot === "" ||
+    pathWithinRoot === ".." ||
+    pathWithinRoot.startsWith(`..${sep}`) ||
+    basename(canonicalPath) !== file.fileName ||
+    basename(dirname(canonicalPath)) !== file.id
+  ) {
+    throw new Error("Uploaded file path is not a trusted Paseo upload");
+  }
+
+  const metadata = await stat(canonicalPath);
+  if (!metadata.isFile() || metadata.size !== file.size) {
+    throw new Error("Uploaded file metadata does not match Paseo upload storage");
+  }
+  return canonicalPath;
 }
 
 function validateHerdrImageAttachment(
