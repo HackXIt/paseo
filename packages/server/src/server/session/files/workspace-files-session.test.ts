@@ -552,6 +552,31 @@ describe("WorkspaceFilesSession", () => {
     expect(message.payload.error).toBeNull();
   });
 
+  test("rejects an oversized upload before accepting transfer frames", () => {
+    const { subsystem, emitted, paseoHome } = makeSubsystem();
+
+    subsystem.handleFileUploadRequest({
+      type: "file.upload.request",
+      fileName: "oversized.bin",
+      mimeType: "application/octet-stream",
+      size: 50 * 1024 * 1024 + 1,
+      modifiedAt: "2026-05-02T00:00:00.000Z",
+      requestId: "req-too-large",
+    });
+
+    expect(emitted).toEqual([
+      {
+        type: "file.upload.response",
+        payload: {
+          requestId: "req-too-large",
+          file: null,
+          error: "Upload exceeds the 52428800-byte limit.",
+        },
+      },
+    ]);
+    expect(existsSync(join(paseoHome, "uploads"))).toBe(false);
+  });
+
   test("round-trips an upload through transfer frames", async () => {
     const { subsystem, emitted, paseoHome } = makeSubsystem();
 

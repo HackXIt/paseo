@@ -7,6 +7,7 @@ import type {
   AgentPermissionRequest,
   AgentPermissionResponse,
   AgentPersistenceHandle,
+  AgentPromptContentBlock,
   AgentPromptInput,
   AgentProvider,
   AgentProviderNotice,
@@ -17,8 +18,9 @@ import type {
   AgentSlashCommand,
   AgentStreamEvent,
 } from "../../agent-sdk-types.js";
-import { runProviderTurn } from "../provider-runner.js";
 import { renderPromptAttachmentAsText } from "../../prompt-attachments.js";
+import { materializeProviderImage } from "../provider-image-output.js";
+import { runProviderTurn } from "../provider-runner.js";
 import {
   encodeHerdrAttachedPiHandle,
   HERDR_ATTACHED_PI_RUNTIME,
@@ -36,6 +38,18 @@ import {
 
 const PI_PROVIDER = "pi";
 const DEFAULT_POLL_INTERVAL_MS = 1_000;
+const MAX_HERDR_IMAGE_BYTES = 50 * 1024 * 1024;
+const SUPPORTED_HERDR_IMAGE_MIME_TYPES = new Set([
+  "image/avif",
+  "image/bmp",
+  "image/gif",
+  "image/heic",
+  "image/heif",
+  "image/jpeg",
+  "image/png",
+  "image/tiff",
+  "image/webp",
+]);
 
 class HerdrAttachmentIdentityError extends Error {}
 
@@ -501,12 +515,59 @@ function renderHerdrPrompt(prompt: AgentPromptInput): string {
         return block.text;
       }
       if (block.type === "image") {
-        return "[Image attachment omitted: Herdr-attached Pi prompt injection supports text only]";
+        const image = validateHerdrImageAttachment(block);
+        const materialized = materializeProviderImage(image);
+        return [
+          "[Image attachment downgraded to a file reference because Herdr-attached Pi prompt injection supports text only.]",
+          `Saved path: ${materialized.path}`,
+        ].join("\n");
+      }
+      if (block.type === "uploaded_file") {
+        return [
+          "[File attachment downgraded to a file reference because Herdr-attached Pi prompt injection supports text only.]",
+          `File: ${block.fileName}`,
+          `Saved path: ${block.path}`,
+          `MIME: ${block.mimeType}`,
+          `Size: ${block.size} bytes`,
+        ].join("\n");
       }
       return renderPromptAttachmentAsText(block);
     })
     .filter((part) => part.trim().length > 0)
     .join("\n\n");
+}
+
+function validateHerdrImageAttachment(
+  image: Extract<AgentPromptContentBlock, { type: "image" }>,
+): Extract<AgentPromptContentBlock, { type: "image" }> {
+  const mimeType = image.mimeType.trim().toLowerCase();
+  if (!SUPPORTED_HERDR_IMAGE_MIME_TYPES.has(mimeType)) {
+    throw new Error(`Unsupported image attachment MIME type: ${image.mimeType}`);
+  }
+
+  const maxBase64Length = Math.ceil(MAX_HERDR_IMAGE_BYTES / 3) * 4;
+  if (image.data.length > maxBase64Length) {
+    throw new Error(`Image attachment exceeds the ${MAX_HERDR_IMAGE_BYTES}-byte limit`);
+  }
+  if (
+    image.data.length === 0 ||
+    image.data.length % 4 !== 0 ||
+    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(image.data)
+  ) {
+    throw new Error("Image attachment is not valid base64 data");
+  }
+
+  let paddingBytes = 0;
+  if (image.data.endsWith("==")) {
+    paddingBytes = 2;
+  } else if (image.data.endsWith("=")) {
+    paddingBytes = 1;
+  }
+  const decodedBytes = (image.data.length / 4) * 3 - paddingBytes;
+  if (decodedBytes > MAX_HERDR_IMAGE_BYTES) {
+    throw new Error(`Image attachment exceeds the ${MAX_HERDR_IMAGE_BYTES}-byte limit`);
+  }
+  return { ...image, mimeType };
 }
 
 function isRunningStatus(status: string | null): boolean {

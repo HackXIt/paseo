@@ -56,6 +56,30 @@ describe("file uploads", () => {
     expect(readFileSync(path, "utf8")).toBe("hello world");
   });
 
+  it("rejects uploads larger than the mobile attachment limit before writing", () => {
+    const paseoHome = makePaseoHome();
+    const uploads = new FileUploadStore({ paseoHome });
+
+    expect(
+      uploads.beginUpload({
+        type: "file.upload.request",
+        fileName: "oversized.bin",
+        mimeType: "application/octet-stream",
+        size: 50 * 1024 * 1024 + 1,
+        modifiedAt: "2026-05-02T00:00:00.000Z",
+        requestId: "req-too-large",
+      }),
+    ).toEqual({
+      type: "file.upload.response",
+      payload: {
+        requestId: "req-too-large",
+        file: null,
+        error: "Upload exceeds the 52428800-byte limit.",
+      },
+    });
+    expect(existsSync(join(paseoHome, "uploads"))).toBe(false);
+  });
+
   it("rejects chunks beyond the declared size and removes the partial file", async () => {
     const paseoHome = makePaseoHome();
     const uploads = new FileUploadStore({ paseoHome });

@@ -350,7 +350,10 @@ export class WorkspaceFilesSession {
   }
 
   handleFileUploadRequest(request: FileUploadRequest): void {
-    this.fileUploads.beginUpload(request);
+    const response = this.fileUploads.beginUpload(request);
+    if (response) {
+      this.host.emit(response);
+    }
   }
 
   async handleFileTransferFrame(frame: FileTransferFrame): Promise<void> {
