@@ -18,6 +18,7 @@ import { FakePi } from "./test-utils/fake-pi.js";
 
 class FakeHerdrClient implements HerdrClient {
   agents: HerdrAgent[] = [];
+  details = new Map<string, HerdrAgent>();
   prompts: Array<{ target: string; text: string }> = [];
   interrupts: string[] = [];
 
@@ -26,6 +27,10 @@ class FakeHerdrClient implements HerdrClient {
   }
 
   async getAgent(target: string): Promise<HerdrAgent> {
+    const details = this.details.get(target);
+    if (details) {
+      return details;
+    }
     const agent = this.agents.find(
       (candidate) =>
         candidate.target === target || candidate.name === target || candidate.paneId === target,
@@ -197,6 +202,37 @@ describe("Herdr attached Pi sessions", () => {
         }),
       ]),
     );
+  });
+
+  test("enriches an attachable Herdr list record with friendly detail labels", async () => {
+    const { file, metadata } = await createAttachment();
+    metadata.herdrTarget = "w9:p2";
+    metadata.herdrPaneId = "w9:p2";
+    const summary = validHerdrAgent(metadata, file);
+    const herdr = new FakeHerdrClient();
+    herdr.agents = [summary];
+    herdr.details.set(summary.target, {
+      ...summary,
+      topic: "finances",
+      workspaceLabel: "firstmate-finances",
+      tabLabel: "fm-copy-review",
+      paneLabel: "Review copy worker",
+    });
+    const sessionDir = await mkdtemp(path.join(tmpdir(), "paseo-empty-pi-sessions-"));
+    const client = new PiRpcAgentClient({
+      logger: pino({ level: "silent" }),
+      runtime: new FakePi(),
+      herdrClient: herdr,
+      providerParams: { sessionDir, herdr: { session: metadata.herdrSession } },
+    });
+
+    await expect(client.listImportableSessions({ limit: 10 })).resolves.toEqual([
+      expect.objectContaining({
+        title: "Live Pi: Review copy worker · finances",
+        summary:
+          "Topic finances · Workspace firstmate-finances · Tab fm-copy-review · Pane Review copy worker · Herdr idle",
+      }),
+    ]);
   });
 
   test("lists a related live Herdr Pi worker outside the requested cwd", async () => {
