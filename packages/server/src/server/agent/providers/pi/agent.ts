@@ -2889,6 +2889,7 @@ export class PiRpcAgentClient implements AgentClient {
         lastActivityAt: history.lastActivityAt ?? detailed.lastActivityAt ?? new Date(),
         displayLabel: display.title,
         summary: display.summary,
+        debugIdentifier: detailed.paneId ?? detailed.target,
       },
     };
   }

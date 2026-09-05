@@ -882,6 +882,7 @@ export const RecentProviderSessionDescriptorPayloadSchema = z.object({
   lastActivityAt: z.string(),
   displayLabel: z.string().nullable().optional(),
   summary: z.string().nullable().optional(),
+  debugIdentifier: z.string().nullable().optional(),
   relatedToRequestedCwd: z.boolean().optional(),
 });
 

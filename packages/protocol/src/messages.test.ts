@@ -101,11 +101,13 @@ describe("recent provider session descriptor compatibility", () => {
         ...baseDescriptor,
         displayLabel: "Live Pi: Review copy worker · finances",
         summary: "Topic finances · Tab fm-copy-review · Pane Review copy worker · Herdr idle",
+        debugIdentifier: "w2M:p1",
       }),
     ).toEqual({
       ...baseDescriptor,
       displayLabel: "Live Pi: Review copy worker · finances",
       summary: "Topic finances · Tab fm-copy-review · Pane Review copy worker · Herdr idle",
+      debugIdentifier: "w2M:p1",
     });
   });
 });

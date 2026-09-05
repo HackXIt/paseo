@@ -564,6 +564,38 @@ describe("ImportSessionSheet", () => {
     });
   });
 
+  it("shows Herdr identifiers and execution paths in scoped import rows", async () => {
+    const fetchRecentProviderSessions = vi.fn(async () => ({
+      requestId: "recent-provider-sessions",
+      entries: [
+        createProviderSessionEntry({
+          providerId: "pi",
+          providerLabel: "Pi",
+          providerHandleId: "encoded-herdr-handle",
+          cwd: "/repo/paseo-worker",
+          displayLabel: "Live Pi: Review copy worker · finances",
+          summary: "Topic finances · Pane Review copy worker · Herdr idle",
+          debugIdentifier: "w2M:p1",
+        }),
+      ],
+    }));
+
+    renderSheet(
+      { fetchRecentProviderSessions, importAgent: vi.fn() } as Pick<
+        DaemonClient,
+        "fetchRecentProviderSessions" | "importAgent"
+      >,
+      {
+        cwd: "/repo/paseo",
+        snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("pi")] },
+      },
+    );
+
+    expect(await screen.findByText("Live Pi: Review copy worker · finances")).toBeTruthy();
+    expect(screen.getByText("Topic finances · Pane Review copy worker · Herdr idle")).toBeTruthy();
+    expect(screen.getByText("w2M:p1 · /repo/paseo-worker")).toBeTruthy();
+  });
+
   it("shows an import error state without closing when selected session import fails", async () => {
     const fetchRecentProviderSessions = vi.fn(async () => ({
       requestId: "recent-provider-sessions",

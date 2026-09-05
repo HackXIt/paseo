@@ -286,6 +286,7 @@ export function toRecentProviderSessionDescriptorPayload(
     lastActivityAt: session.lastActivityAt.toISOString(),
     ...(session.displayLabel ? { displayLabel: session.displayLabel } : {}),
     ...(session.summary ? { summary: session.summary } : {}),
+    ...(session.debugIdentifier ? { debugIdentifier: session.debugIdentifier } : {}),
     ...(session.relatedToRequestedCwd ? { relatedToRequestedCwd: true } : {}),
   };
 }

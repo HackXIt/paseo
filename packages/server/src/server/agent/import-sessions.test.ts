@@ -60,6 +60,7 @@ function makeImportableSession(args: {
   lastPrompt?: string;
   displayLabel?: string | null;
   summary?: string | null;
+  debugIdentifier?: string | null;
   relatedToRequestedCwd?: boolean;
 }): ManagedImportableProviderSession {
   const provider = args.provider ?? "codex";
@@ -74,6 +75,7 @@ function makeImportableSession(args: {
     lastPromptPreview: args.lastPrompt ?? args.firstPrompt ?? null,
     ...(args.displayLabel ? { displayLabel: args.displayLabel } : {}),
     ...(args.summary ? { summary: args.summary } : {}),
+    ...(args.debugIdentifier ? { debugIdentifier: args.debugIdentifier } : {}),
     ...(args.relatedToRequestedCwd ? { relatedToRequestedCwd: true } : {}),
   };
 }
@@ -343,6 +345,7 @@ test("listImportableProviderSessions exposes friendly live-session display field
           title: "Live Pi: Review copy worker · finances",
           displayLabel: "Live Pi: Review copy worker · finances",
           summary: "Topic finances · Tab fm-copy-review · Pane Review copy worker · Herdr idle",
+          debugIdentifier: "w2M:p1",
           lastActivityAt: "2026-04-30T12:05:00.000Z",
         }),
       ]),
@@ -363,6 +366,7 @@ test("listImportableProviderSessions exposes friendly live-session display field
       lastActivityAt: "2026-04-30T12:05:00.000Z",
       displayLabel: "Live Pi: Review copy worker · finances",
       summary: "Topic finances · Tab fm-copy-review · Pane Review copy worker · Herdr idle",
+      debugIdentifier: "w2M:p1",
     },
   ]);
 });

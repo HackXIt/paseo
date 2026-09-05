@@ -206,6 +206,7 @@ function ImportSessionSheetRow({
   const { t } = useTranslation();
   const title = getSessionTitle(entry);
   const promptPreview = getPromptPreview(entry);
+  const debugDetails = [entry.debugIdentifier?.trim(), entry.cwd].filter(Boolean).join(" · ");
   const lastActivity = formatTimeAgo(new Date(entry.lastActivityAt));
   const ProviderIcon = getProviderIcon(entry.providerId);
   const accessibilityState = useMemo(
@@ -248,9 +249,9 @@ function ImportSessionSheetRow({
         <Text style={styles.rowPreview} numberOfLines={2}>
           {promptPreview}
         </Text>
-        {showCwd && entry.cwd ? (
+        {entry.debugIdentifier || (showCwd && entry.cwd) ? (
           <Text style={styles.rowCwd} numberOfLines={1}>
-            {entry.cwd}
+            {debugDetails}
           </Text>
         ) : null}
       </View>
