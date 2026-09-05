@@ -42,6 +42,9 @@ import {
 const PI_PROVIDER = "pi";
 const DEFAULT_POLL_INTERVAL_MS = 1_000;
 const MAX_HERDR_ATTACHMENT_BYTES = 50 * 1024 * 1024;
+const MAX_HERDR_MIME_TYPE_LENGTH = 255;
+const MIME_TYPE_PATTERN =
+  /^[A-Za-z0-9!#$%&'*+.^_`|~-]+\/[A-Za-z0-9!#$%&'*+.^_`|~-]+$/;
 const SUPPORTED_HERDR_IMAGE_MIME_TYPES = new Set([
   "image/avif",
   "image/bmp",
@@ -529,13 +532,13 @@ async function renderHerdrPrompt(prompt: AgentPromptInput, uploadsRoot: string):
         ].join("\n"),
       );
     } else if (block.type === "uploaded_file") {
-      const uploadedPath = await validateHerdrUploadedFile(block, uploadsRoot);
+      const uploadedFile = await validateHerdrUploadedFile(block, uploadsRoot);
       parts.push(
         [
           "[File attachment downgraded to a file reference because Herdr-attached Pi prompt injection supports text only.]",
           `File: ${block.fileName}`,
-          `Saved path: ${uploadedPath}`,
-          `MIME: ${block.mimeType}`,
+          `Saved path: ${uploadedFile.path}`,
+          `MIME: ${uploadedFile.mimeType}`,
           `Size: ${block.size} bytes`,
         ].join("\n"),
       );
@@ -549,9 +552,13 @@ async function renderHerdrPrompt(prompt: AgentPromptInput, uploadsRoot: string):
 async function validateHerdrUploadedFile(
   file: Extract<AgentPromptContentBlock, { type: "uploaded_file" }>,
   uploadsRoot: string,
-): Promise<string> {
+): Promise<{ path: string; mimeType: string }> {
   if (file.size > MAX_HERDR_ATTACHMENT_BYTES) {
     throw new Error(`File attachment exceeds the ${MAX_HERDR_ATTACHMENT_BYTES}-byte limit`);
+  }
+  const mimeType = file.mimeType.trim().toLowerCase();
+  if (mimeType.length > MAX_HERDR_MIME_TYPE_LENGTH || !MIME_TYPE_PATTERN.test(mimeType)) {
+    throw new Error("Uploaded file has an invalid MIME type");
   }
   const [canonicalRoot, canonicalPath] = await Promise.all([
     realpath(uploadsRoot).catch(() => null),
@@ -576,7 +583,7 @@ async function validateHerdrUploadedFile(
   if (!metadata.isFile() || metadata.size !== file.size) {
     throw new Error("Uploaded file metadata does not match Paseo upload storage");
   }
-  return canonicalPath;
+  return { path: canonicalPath, mimeType };
 }
 
 function validateHerdrImageAttachment(

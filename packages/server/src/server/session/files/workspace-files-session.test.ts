@@ -552,7 +552,7 @@ describe("WorkspaceFilesSession", () => {
     expect(message.payload.error).toBeNull();
   });
 
-  test("rejects an oversized upload before accepting transfer frames", () => {
+  test("accepts large uploads before provider-specific attachment validation", () => {
     const { subsystem, emitted, paseoHome } = makeSubsystem();
 
     subsystem.handleFileUploadRequest({
@@ -564,16 +564,7 @@ describe("WorkspaceFilesSession", () => {
       requestId: "req-too-large",
     });
 
-    expect(emitted).toEqual([
-      {
-        type: "file.upload.response",
-        payload: {
-          requestId: "req-too-large",
-          file: null,
-          error: "Upload exceeds the 52428800-byte limit.",
-        },
-      },
-    ]);
+    expect(emitted).toEqual([]);
     expect(existsSync(join(paseoHome, "uploads"))).toBe(false);
   });
 
