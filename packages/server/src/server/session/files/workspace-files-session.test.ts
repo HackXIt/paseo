@@ -553,7 +553,7 @@ describe("WorkspaceFilesSession", () => {
   });
 
   test("accepts large uploads before provider-specific attachment validation", () => {
-    const { subsystem, emitted, paseoHome } = makeSubsystem();
+    const { subsystem, emitted } = makeSubsystem();
 
     subsystem.handleFileUploadRequest({
       type: "file.upload.request",
@@ -569,7 +569,7 @@ describe("WorkspaceFilesSession", () => {
   });
 
   test("round-trips an upload through transfer frames", async () => {
-    const { subsystem, emitted, paseoHome } = makeSubsystem();
+    const { subsystem, emitted } = makeSubsystem();
 
     subsystem.handleFileUploadRequest({
       type: "file.upload.request",

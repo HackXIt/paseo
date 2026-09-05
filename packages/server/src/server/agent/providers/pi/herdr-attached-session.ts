@@ -43,8 +43,7 @@ const PI_PROVIDER = "pi";
 const DEFAULT_POLL_INTERVAL_MS = 1_000;
 const MAX_HERDR_ATTACHMENT_BYTES = 50 * 1024 * 1024;
 const MAX_HERDR_MIME_TYPE_LENGTH = 255;
-const MIME_TYPE_PATTERN =
-  /^[A-Za-z0-9!#$%&'*+.^_`|~-]+\/[A-Za-z0-9!#$%&'*+.^_`|~-]+$/;
+const MIME_TYPE_PATTERN = /^[A-Za-z0-9!#$%&'*+.^_`|~-]+\/[A-Za-z0-9!#$%&'*+.^_`|~-]+$/;
 const SUPPORTED_HERDR_IMAGE_MIME_TYPES = new Set([
   "image/avif",
   "image/bmp",
