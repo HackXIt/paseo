@@ -245,6 +245,9 @@ function isRelatedHerdrAttachment(
 ): boolean {
   return (
     child.herdrSession === parent.herdrSession &&
+    (!child.herdrWorkspaceId ||
+      !parent.herdrWorkspaceId ||
+      child.herdrWorkspaceId === parent.herdrWorkspaceId) &&
     Boolean(
       child.herdrParentTarget &&
       collectHerdrAttachmentKeys(parent).includes(child.herdrParentTarget),

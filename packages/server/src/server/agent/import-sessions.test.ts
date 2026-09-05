@@ -882,6 +882,68 @@ test("importProviderSession stamps a related Herdr worker with its parent agent 
   ]);
 });
 
+test("importProviderSession matches a parent alias within the worker's Herdr workspace", async () => {
+  const workerMetadata: HerdrAttachedPiMetadata = {
+    runtime: HERDR_ATTACHED_PI_RUNTIME,
+    herdrSession: "fm-lab-session",
+    herdrTarget: "w2D:pC",
+    herdrAlias: "worker",
+    herdrPaneId: "w2D:pC",
+    herdrWorkspaceId: "w2D",
+    herdrParentTarget: "firstmate",
+    nativeSessionId: "worker-native-session",
+    nativeSessionFile: "/tmp/worker.jsonl",
+    cwd: "/tmp/worker-worktree",
+  };
+  const workerHandle = encodeHerdrAttachedPiHandle(workerMetadata);
+  const harness = await ProviderImportHarness.create({
+    provider: "pi",
+    sessionId: workerHandle,
+    nativeHandle: workerMetadata.nativeSessionFile,
+    cwd: workerMetadata.cwd,
+  });
+  for (const [id, workspaceId, paneId] of [
+    ["wrong-parent", "w9Z", "w9Z:pA"],
+    ["correct-parent", "w2D", "w2D:pA"],
+  ] as const) {
+    const metadata: HerdrAttachedPiMetadata = {
+      runtime: HERDR_ATTACHED_PI_RUNTIME,
+      herdrSession: "fm-lab-session",
+      herdrTarget: paneId,
+      herdrAlias: "firstmate",
+      herdrPaneId: paneId,
+      herdrWorkspaceId: workspaceId,
+      nativeSessionId: `${id}-native-session`,
+      nativeSessionFile: `/tmp/${id}.jsonl`,
+      cwd: `/tmp/${id}-workspace`,
+    };
+    await harness.seed(
+      makeStoredProviderSession({
+        id,
+        provider: "pi",
+        cwd: metadata.cwd,
+        workspaceId: `${id}-workspace`,
+        sessionId: encodeHerdrAttachedPiHandle(metadata),
+        nativeHandle: metadata.nativeSessionFile,
+        metadata,
+        archivedAt: null,
+      }),
+    );
+  }
+
+  await harness.import({ providerHandleId: workerHandle, cwd: workerMetadata.cwd });
+
+  expect(harness.freshImports).toEqual([
+    {
+      provider: "pi",
+      providerHandleId: workerHandle,
+      cwd: workerMetadata.cwd,
+      workspaceId: "ws-restored",
+      labels: { [PARENT_AGENT_ID_LABEL]: "correct-parent" },
+    },
+  ]);
+});
+
 test("importProviderSession does not infer a parent from a shared Herdr workspace", async () => {
   const workerMetadata: HerdrAttachedPiMetadata = {
     runtime: HERDR_ATTACHED_PI_RUNTIME,
