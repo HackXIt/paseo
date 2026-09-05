@@ -880,6 +880,8 @@ export const RecentProviderSessionDescriptorPayloadSchema = z.object({
   firstPromptPreview: z.string().nullable(),
   lastPromptPreview: z.string().nullable(),
   lastActivityAt: z.string(),
+  displayLabel: z.string().nullable().optional(),
+  summary: z.string().nullable().optional(),
   relatedToRequestedCwd: z.boolean().optional(),
 });
 

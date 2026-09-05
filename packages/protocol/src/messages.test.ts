@@ -3,6 +3,7 @@ import {
   FileExplorerRequestSchema,
   PaseoWorktreeArchiveRequestSchema,
   parseServerInfoStatusPayload,
+  RecentProviderSessionDescriptorPayloadSchema,
   SessionInboundMessageSchema,
   SessionOutboundMessageSchema,
   WorkspaceProjectDescriptorPayloadSchema,
@@ -73,6 +74,39 @@ describe("project icon revision compatibility", () => {
         projectIconRevision: "automatic:none:v1",
       }),
     ).toEqual({ ...project, projectIconRevision: "automatic:none:v1" });
+  });
+});
+
+describe("recent provider session descriptor compatibility", () => {
+  const baseDescriptor = {
+    providerId: "pi",
+    providerLabel: "Pi",
+    providerHandleId: "herdr-worker",
+    cwd: "/repo/paseo",
+    title: "Live Pi: w2M:p1",
+    firstPromptPreview: null,
+    lastPromptPreview: "Herdr working",
+    lastActivityAt: "2026-04-30T12:00:00.000Z",
+  };
+
+  test("accepts older import descriptors without display fields", () => {
+    expect(RecentProviderSessionDescriptorPayloadSchema.parse(baseDescriptor)).toEqual(
+      baseDescriptor,
+    );
+  });
+
+  test("accepts friendly import display fields", () => {
+    expect(
+      RecentProviderSessionDescriptorPayloadSchema.parse({
+        ...baseDescriptor,
+        displayLabel: "Live Pi: Review copy worker · finances",
+        summary: "Topic finances · Tab fm-copy-review · Pane Review copy worker · Herdr idle",
+      }),
+    ).toEqual({
+      ...baseDescriptor,
+      displayLabel: "Live Pi: Review copy worker · finances",
+      summary: "Topic finances · Tab fm-copy-review · Pane Review copy worker · Herdr idle",
+    });
   });
 });
 

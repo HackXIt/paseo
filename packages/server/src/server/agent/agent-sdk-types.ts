@@ -547,6 +547,8 @@ export interface ImportableProviderSession {
   firstPromptPreview: string | null;
   lastPromptPreview: string | null;
   lastActivityAt: Date;
+  displayLabel?: string | null;
+  summary?: string | null;
   /**
    * Marks a live session whose execution cwd differs from the cwd hint but still
    * belongs to that import context.

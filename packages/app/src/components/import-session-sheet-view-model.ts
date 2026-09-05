@@ -98,6 +98,10 @@ export function collectErroredProviderLabels(
 }
 
 export function getSessionTitle(entry: FetchRecentProviderSessionEntry): string {
+  const displayLabel = entry.displayLabel?.trim();
+  if (displayLabel) {
+    return displayLabel;
+  }
   const title = entry.title?.trim();
   if (title) {
     return title;
@@ -111,6 +115,7 @@ export function getSessionTitle(entry: FetchRecentProviderSessionEntry): string 
 
 export function getPromptPreview(entry: FetchRecentProviderSessionEntry): string {
   return (
+    entry.summary?.trim() ||
     entry.lastPromptPreview?.trim() ||
     entry.firstPromptPreview?.trim() ||
     i18n.t("importSession.preview.noPrompt")

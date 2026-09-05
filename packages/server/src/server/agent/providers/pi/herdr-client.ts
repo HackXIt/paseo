@@ -11,6 +11,10 @@ export interface HerdrAgent {
   paneId?: string;
   herdrWorkspaceId?: string;
   parentTarget?: string;
+  topic?: string;
+  workspaceLabel?: string;
+  tabLabel?: string;
+  paneLabel?: string;
   nativeSessionId: string | null;
   nativeSessionFile: string | null;
   lastActivityAt: Date | null;
@@ -193,6 +197,7 @@ function parseHerdrAgentRecord(value: unknown): HerdrAgent | null {
     "parentId",
     "parent_id",
   ]);
+  const labels = readHerdrPresentationLabels(value);
   const aggregateStatus = readFirstString(value, ["status", "lifecycle", "state"]);
   const agentStatus = readString(value, "agent_status");
   const ownStatus =
@@ -220,6 +225,7 @@ function parseHerdrAgentRecord(value: unknown): HerdrAgent | null {
     ...(paneId ? { paneId } : {}),
     ...(herdrWorkspaceId ? { herdrWorkspaceId } : {}),
     ...(parentTarget ? { parentTarget } : {}),
+    ...labels,
     nativeSessionId:
       readFirstString(value, ["nativeSessionId", "native_session_id", "session_id"], agentSession, [
         "id",
@@ -228,6 +234,55 @@ function parseHerdrAgentRecord(value: unknown): HerdrAgent | null {
       ]) ?? derivePiSessionIdFromFile(nativeSessionFile),
     nativeSessionFile,
     lastActivityAt: readDate(value, "lastActivityAt") ?? readDate(value, "last_activity_at"),
+  };
+}
+
+function readHerdrPresentationLabels(
+  value: Record<string, unknown>,
+): Pick<HerdrAgent, "topic" | "workspaceLabel" | "tabLabel" | "paneLabel"> {
+  const workspaceRecord = readRecordField(value, "workspace");
+  const tabRecord = readRecordField(value, "tab");
+  const paneRecord = readRecordField(value, "pane");
+  const topic = readFirstString(value, ["topic", "sessionTopic", "session_topic"]);
+  const workspaceLabel = readFirstString(
+    value,
+    [
+      "workspaceLabel",
+      "workspace_label",
+      "workspaceTitle",
+      "workspace_title",
+      "workspaceName",
+      "workspace_name",
+    ],
+    workspaceRecord,
+    ["label", "name", "title"],
+  );
+  const tabLabel = readFirstString(
+    value,
+    ["tabLabel", "tab_label", "tabTitle", "tab_title", "tabName", "tab_name"],
+    tabRecord,
+    ["label", "name", "title"],
+  );
+  const paneLabel = readFirstString(
+    value,
+    [
+      "paneLabel",
+      "pane_label",
+      "paneTitle",
+      "pane_title",
+      "paneName",
+      "pane_name",
+      "title",
+      "label",
+    ],
+    paneRecord,
+    ["label", "name", "title"],
+  );
+  return {
+    ...(topic ? { topic } : {}),
+    ...(workspaceLabel ? { workspaceLabel } : {}),
+    ...(tabLabel ? { tabLabel } : {}),
+    ...(paneLabel ? { paneLabel } : {}),
   };
 }
 

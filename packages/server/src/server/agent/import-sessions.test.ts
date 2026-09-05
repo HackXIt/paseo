@@ -58,6 +58,8 @@ function makeImportableSession(args: {
   lastActivityAt: string;
   firstPrompt?: string;
   lastPrompt?: string;
+  displayLabel?: string | null;
+  summary?: string | null;
   relatedToRequestedCwd?: boolean;
 }): ManagedImportableProviderSession {
   const provider = args.provider ?? "codex";
@@ -70,6 +72,8 @@ function makeImportableSession(args: {
     lastActivityAt: new Date(args.lastActivityAt),
     firstPromptPreview: args.firstPrompt ?? null,
     lastPromptPreview: args.lastPrompt ?? args.firstPrompt ?? null,
+    ...(args.displayLabel ? { displayLabel: args.displayLabel } : {}),
+    ...(args.summary ? { summary: args.summary } : {}),
     ...(args.relatedToRequestedCwd ? { relatedToRequestedCwd: true } : {}),
   };
 }
@@ -321,6 +325,44 @@ test("listImportableProviderSessions keeps provider-related live sessions outsid
       lastPromptPreview: null,
       lastActivityAt: "2026-04-30T12:05:00.000Z",
       relatedToRequestedCwd: true,
+    },
+  ]);
+});
+
+test("listImportableProviderSessions exposes friendly live-session display fields", async () => {
+  const cwd = "/tmp/project";
+  const result = await listImportableProviderSessions({
+    request: makeRequest({ cwd, providers: ["pi"], limit: 10 }),
+    agentManager: {
+      listAgents: () => [],
+      listImportableSessions: vi.fn(async () => [
+        makeImportableSession({
+          provider: "pi",
+          sessionId: "herdr-worker",
+          cwd,
+          title: "Live Pi: Review copy worker · finances",
+          displayLabel: "Live Pi: Review copy worker · finances",
+          summary: "Topic finances · Tab fm-copy-review · Pane Review copy worker · Herdr idle",
+          lastActivityAt: "2026-04-30T12:05:00.000Z",
+        }),
+      ]),
+    },
+    agentStorage: { list: async () => [] },
+    providerSnapshotManager: { getProviderLabel: () => "Pi" },
+  });
+
+  expect(result.entries).toEqual([
+    {
+      providerId: "pi",
+      providerLabel: "Pi",
+      providerHandleId: "herdr-worker",
+      cwd,
+      title: "Live Pi: Review copy worker · finances",
+      firstPromptPreview: null,
+      lastPromptPreview: null,
+      lastActivityAt: "2026-04-30T12:05:00.000Z",
+      displayLabel: "Live Pi: Review copy worker · finances",
+      summary: "Topic finances · Tab fm-copy-review · Pane Review copy worker · Herdr idle",
     },
   ]);
 });

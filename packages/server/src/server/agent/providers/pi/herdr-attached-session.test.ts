@@ -131,6 +131,74 @@ describe("Herdr attached Pi sessions", () => {
     ]);
   });
 
+  test("lists live Herdr Pi sessions with friendly Herdr presentation labels", async () => {
+    const first = await createAttachment();
+    first.metadata.herdrTarget = "w9:p2";
+    first.metadata.herdrPaneId = "w9:p2";
+    const second = await createAttachment();
+    second.metadata.herdrTarget = "w9:p3";
+    second.metadata.herdrPaneId = "w9:p3";
+    second.metadata.nativeSessionId = "second-native-session";
+    second.metadata.cwd = first.metadata.cwd;
+    await writeHistory(second.file, [
+      {
+        type: "session",
+        id: second.metadata.nativeSessionId,
+        timestamp: "2026-06-09T00:00:00.000Z",
+        cwd: second.metadata.cwd,
+      },
+    ]);
+    const copySummary =
+      "Topic finances · Workspace firstmate-finances · Tab fm-copy-review · Pane Review copy worker · Herdr idle";
+    const implementationSummary =
+      "Topic finances · Workspace firstmate-finances · Tab fm-implementation · Pane Implementation worker · Herdr idle";
+    const herdr = new FakeHerdrClient();
+    herdr.agents = [
+      {
+        ...validHerdrAgent(first.metadata, first.file),
+        topic: "finances",
+        workspaceLabel: "firstmate-finances",
+        tabLabel: "fm-copy-review",
+        paneLabel: "Review copy worker",
+      },
+      {
+        ...validHerdrAgent(second.metadata, second.file),
+        topic: "finances",
+        workspaceLabel: "firstmate-finances",
+        tabLabel: "fm-implementation",
+        paneLabel: "Implementation worker",
+      },
+    ];
+    const sessionDir = await mkdtemp(path.join(tmpdir(), "paseo-empty-pi-sessions-"));
+    const client = new PiRpcAgentClient({
+      logger: pino({ level: "silent" }),
+      runtime: new FakePi(),
+      herdrClient: herdr,
+      providerParams: { sessionDir, herdr: { session: first.metadata.herdrSession } },
+    });
+
+    const sessions = await client.listImportableSessions({ limit: 10 });
+
+    expect(sessions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          cwd: first.metadata.cwd,
+          title: "Live Pi: Review copy worker · finances",
+          displayLabel: "Live Pi: Review copy worker · finances",
+          lastPromptPreview: copySummary,
+          summary: copySummary,
+        }),
+        expect.objectContaining({
+          cwd: first.metadata.cwd,
+          title: "Live Pi: Implementation worker · finances",
+          displayLabel: "Live Pi: Implementation worker · finances",
+          lastPromptPreview: implementationSummary,
+          summary: implementationSummary,
+        }),
+      ]),
+    );
+  });
+
   test("lists a related live Herdr Pi worker outside the requested cwd", async () => {
     const { file, metadata } = await createAttachment();
     metadata.herdrTarget = "w2D:pA";

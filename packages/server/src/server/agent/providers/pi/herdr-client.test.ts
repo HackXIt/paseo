@@ -135,6 +135,34 @@ describe("Herdr client parsing", () => {
     });
   });
 
+  test("parses Herdr presentation labels for import display", () => {
+    expect(
+      parseHerdrAgentPayload({
+        result: {
+          agent: {
+            agent: "pi",
+            pane_id: "w9:p2",
+            foreground_cwd: "/workspace/worker",
+            topic: "finances",
+            workspace_label: "firstmate-finances",
+            tab_label: "fm-review-copy",
+            pane_title: "Review copy worker",
+            agent_session: {
+              value:
+                "/home/example/.pi/agent/sessions/--workspace-worker--/2026-08-28T17-39-22-374Z_01a04974-6e86-7db6-a718-ffd7c4f0af2d.jsonl",
+            },
+          },
+        },
+      }),
+    ).toMatchObject({
+      target: "w9:p2",
+      topic: "finances",
+      workspaceLabel: "firstmate-finances",
+      tabLabel: "fm-review-copy",
+      paneLabel: "Review copy worker",
+    });
+  });
+
   test("parses real path-shaped Herdr Pi get records", () => {
     expect(
       parseHerdrAgentPayload({
