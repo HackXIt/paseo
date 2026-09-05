@@ -244,6 +244,56 @@ describe("Herdr attached Pi sessions", () => {
     );
   });
 
+  test("excludes a same-alias worker from another Herdr workspace", async () => {
+    const { file, metadata } = await createAttachment();
+    metadata.herdrTarget = "firstmate";
+    metadata.herdrAlias = "firstmate";
+    metadata.herdrPaneId = "w2D:pA";
+    metadata.herdrWorkspaceId = "w2D";
+    const workerFile = path.join(path.dirname(file), "unrelated-worker.jsonl");
+    const workerMetadata: HerdrAttachedPiMetadata = {
+      ...metadata,
+      herdrTarget: "w9Z:pC",
+      herdrAlias: "worker",
+      herdrPaneId: "w9Z:pC",
+      herdrWorkspaceId: "w9Z",
+      herdrParentTarget: "firstmate",
+      nativeSessionId: "unrelated-worker-native-session",
+      nativeSessionFile: workerFile,
+      cwd: path.join(path.dirname(metadata.cwd), "unrelated-worker-project"),
+    };
+    await writeHistory(workerFile, [
+      {
+        type: "session",
+        id: workerMetadata.nativeSessionId,
+        timestamp: "2026-06-09T00:00:00.000Z",
+        cwd: workerMetadata.cwd,
+      },
+    ]);
+    const herdr = new FakeHerdrClient();
+    herdr.agents = [
+      { ...validHerdrAgent(metadata, file), herdrWorkspaceId: "w2D" },
+      {
+        ...validHerdrAgent(workerMetadata, workerFile),
+        herdrWorkspaceId: "w9Z",
+        parentTarget: "firstmate",
+      },
+    ];
+    const sessionDir = await mkdtemp(path.join(tmpdir(), "paseo-empty-pi-sessions-"));
+    const client = new PiRpcAgentClient({
+      logger: pino({ level: "silent" }),
+      runtime: new FakePi(),
+      herdrClient: herdr,
+      providerParams: { sessionDir, herdr: { session: metadata.herdrSession } },
+    });
+
+    const sessions = await client.listImportableSessions({ cwd: metadata.cwd, limit: 10 });
+
+    expect(sessions.map((session) => session.providerHandleId)).not.toContain(
+      encodeHerdrAttachedPiHandle(workerMetadata),
+    );
+  });
+
   test("does not probe Herdr during managed Pi imports unless enabled", async () => {
     const { file } = await createAttachment();
     const marker = path.join(path.dirname(path.dirname(file)), "herdr-probed");

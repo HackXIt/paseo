@@ -140,7 +140,7 @@ interface HerdrImportableSessionCandidate {
 }
 
 interface HerdrRelatedImportScope {
-  targetKeys: ReadonlySet<string>;
+  workspaceIdsByTargetKey: ReadonlyMap<string, ReadonlySet<string | null>>;
   workspaceIds: ReadonlySet<string>;
 }
 
@@ -150,29 +150,37 @@ function createHerdrRelatedImportScope(
   agents: readonly HerdrAgent[],
   matchesCwd: (cwd: string) => boolean,
 ): HerdrRelatedImportScope {
-  const targetKeys = new Set<string>();
+  const workspaceIdsByTargetKey = new Map<string, Set<string | null>>();
   const workspaceIds = new Set<string>();
   for (const agent of agents) {
     if (!isAttachableHerdrPiAgent(agent) || !agent.cwd || !matchesCwd(agent.cwd)) {
       continue;
     }
-    for (const key of collectHerdrTargetKeys(agent)) {
-      targetKeys.add(key);
-    }
     const workspaceId = getHerdrWorkspaceId(agent);
+    for (const key of collectHerdrTargetKeys(agent)) {
+      const ids = workspaceIdsByTargetKey.get(key) ?? new Set<string | null>();
+      ids.add(workspaceId);
+      workspaceIdsByTargetKey.set(key, ids);
+    }
     if (workspaceId) {
       workspaceIds.add(workspaceId);
     }
   }
-  return { targetKeys, workspaceIds };
+  return { workspaceIdsByTargetKey, workspaceIds };
 }
 
 function isHerdrAgentRelatedToScope(agent: HerdrAgent, scope: HerdrRelatedImportScope): boolean {
   const parentTarget = agent.parentTarget;
-  if (parentTarget && scope.targetKeys.has(parentTarget)) {
-    return true;
-  }
   const workspaceId = getHerdrWorkspaceId(agent);
+  if (parentTarget) {
+    const parentWorkspaceIds = scope.workspaceIdsByTargetKey.get(parentTarget);
+    if (
+      parentWorkspaceIds &&
+      (!workspaceId || parentWorkspaceIds.has(null) || parentWorkspaceIds.has(workspaceId))
+    ) {
+      return true;
+    }
+  }
   return Boolean(workspaceId && scope.workspaceIds.has(workspaceId));
 }
 
