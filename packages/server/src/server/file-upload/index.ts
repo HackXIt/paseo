@@ -26,7 +26,6 @@ interface PendingUpload {
 
 export class FileUploadStore {
   private static readonly defaultStaleUploadTimeoutMs = 10 * 60 * 1000;
-  private static readonly maxUploadBytes = 50 * 1024 * 1024;
 
   private readonly paseoHome: string;
   private readonly staleUploadTimeoutMs: number;
@@ -43,17 +42,6 @@ export class FileUploadStore {
     if (existingUpload) {
       this.clearPendingUpload(existingUpload);
       void existingUpload.queue.then(() => this.removeUploadDirectory(existingUpload));
-    }
-
-    if (request.size > FileUploadStore.maxUploadBytes) {
-      return {
-        type: "file.upload.response",
-        payload: {
-          requestId: request.requestId,
-          file: null,
-          error: `Upload exceeds the ${FileUploadStore.maxUploadBytes}-byte limit.`,
-        },
-      };
     }
 
     const fileName = sanitizeFileName(request.fileName);

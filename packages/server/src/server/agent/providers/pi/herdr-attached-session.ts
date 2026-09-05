@@ -41,7 +41,7 @@ import {
 
 const PI_PROVIDER = "pi";
 const DEFAULT_POLL_INTERVAL_MS = 1_000;
-const MAX_HERDR_IMAGE_BYTES = 50 * 1024 * 1024;
+const MAX_HERDR_ATTACHMENT_BYTES = 50 * 1024 * 1024;
 const SUPPORTED_HERDR_IMAGE_MIME_TYPES = new Set([
   "image/avif",
   "image/bmp",
@@ -550,6 +550,9 @@ async function validateHerdrUploadedFile(
   file: Extract<AgentPromptContentBlock, { type: "uploaded_file" }>,
   uploadsRoot: string,
 ): Promise<string> {
+  if (file.size > MAX_HERDR_ATTACHMENT_BYTES) {
+    throw new Error(`File attachment exceeds the ${MAX_HERDR_ATTACHMENT_BYTES}-byte limit`);
+  }
   const [canonicalRoot, canonicalPath] = await Promise.all([
     realpath(uploadsRoot).catch(() => null),
     realpath(file.path).catch(() => null),
@@ -584,9 +587,9 @@ function validateHerdrImageAttachment(
     throw new Error(`Unsupported image attachment MIME type: ${image.mimeType}`);
   }
 
-  const maxBase64Length = Math.ceil(MAX_HERDR_IMAGE_BYTES / 3) * 4;
+  const maxBase64Length = Math.ceil(MAX_HERDR_ATTACHMENT_BYTES / 3) * 4;
   if (image.data.length > maxBase64Length) {
-    throw new Error(`Image attachment exceeds the ${MAX_HERDR_IMAGE_BYTES}-byte limit`);
+    throw new Error(`Image attachment exceeds the ${MAX_HERDR_ATTACHMENT_BYTES}-byte limit`);
   }
   if (
     image.data.length === 0 ||
@@ -603,8 +606,8 @@ function validateHerdrImageAttachment(
     paddingBytes = 1;
   }
   const decodedBytes = (image.data.length / 4) * 3 - paddingBytes;
-  if (decodedBytes > MAX_HERDR_IMAGE_BYTES) {
-    throw new Error(`Image attachment exceeds the ${MAX_HERDR_IMAGE_BYTES}-byte limit`);
+  if (decodedBytes > MAX_HERDR_ATTACHMENT_BYTES) {
+    throw new Error(`Image attachment exceeds the ${MAX_HERDR_ATTACHMENT_BYTES}-byte limit`);
   }
   return { ...image, mimeType };
 }

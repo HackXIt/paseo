@@ -387,6 +387,39 @@ describe("Herdr attached Pi sessions", () => {
     await session.close();
   });
 
+  test("rejects oversized uploaded files at the Herdr fallback boundary", async () => {
+    const { file, metadata } = await createAttachment();
+    const uploadsRoot = path.join(path.dirname(file), "uploads");
+    const uploadedPath = path.join(uploadsRoot, "upload_large", "large.bin");
+    await mkdir(path.dirname(uploadedPath), { recursive: true });
+    await writeFile(uploadedPath, "small", "utf8");
+    const herdr = new FakeHerdrClient();
+    herdr.agents = [validHerdrAgent(metadata, file)];
+    const session = new HerdrAttachedPiSession({
+      herdrClient: herdr,
+      metadata,
+      config: { cwd: metadata.cwd },
+      pollIntervalMs: 60_000,
+      uploadsRoot,
+    });
+
+    await expect(
+      session.startTurn([
+        { type: "text", text: "Read this file." },
+        {
+          type: "uploaded_file",
+          id: "upload_large",
+          fileName: "large.bin",
+          mimeType: "application/octet-stream",
+          size: 50 * 1024 * 1024 + 1,
+          path: uploadedPath,
+        },
+      ]),
+    ).rejects.toThrow("File attachment exceeds the 52428800-byte limit");
+    expect(herdr.prompts).toEqual([]);
+    await session.close();
+  });
+
   test.each([
     {
       name: "unsupported image types",
