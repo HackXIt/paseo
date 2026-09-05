@@ -609,8 +609,6 @@ describe("WorkspaceFilesSession", () => {
     }
     expect(message.payload.error).toBeNull();
     expect(message.payload.file?.fileName).toBe("notes.txt");
-    expect(readFileSync(join(paseoHome, "uploads", "upload_req-upload", "notes.txt"), "utf8")).toBe(
-      "hello world",
-    );
+    expect(readFileSync(message.payload.file!.path, "utf8")).toBe("hello world");
   });
 });

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, rm, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 
@@ -13,7 +14,6 @@ interface FileUploadStoreOptions {
 interface PendingUpload {
   requestId: string;
   id: string;
-  attempt: number;
   fileName: string;
   mimeType: string;
   size: number;
@@ -45,13 +45,11 @@ export class FileUploadStore {
     }
 
     const fileName = sanitizeFileName(request.fileName);
-    const attempt = existingUpload ? existingUpload.attempt + 1 : 1;
-    const id = buildUploadId(request.requestId, attempt);
+    const id = buildUploadId(request.requestId);
     const uploadDir = join(this.paseoHome, "uploads", id);
     const upload: PendingUpload = {
       requestId: request.requestId,
       id,
-      attempt,
       fileName,
       mimeType: request.mimeType,
       size: request.size,
@@ -208,9 +206,8 @@ function sanitizeUploadId(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]/g, "_") || "file";
 }
 
-function buildUploadId(requestId: string, attempt: number): string {
-  const baseId = `upload_${sanitizeUploadId(requestId)}`;
-  return attempt === 1 ? baseId : `${baseId}_${attempt}`;
+function buildUploadId(requestId: string): string {
+  return `upload_${sanitizeUploadId(requestId)}_${randomUUID()}`;
 }
 
 function sanitizeFileName(value: string): string {
