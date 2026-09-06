@@ -552,8 +552,24 @@ describe("WorkspaceFilesSession", () => {
     expect(message.payload.error).toBeNull();
   });
 
+  test("accepts large uploads before provider-specific attachment validation", () => {
+    const { subsystem, emitted } = makeSubsystem();
+
+    subsystem.handleFileUploadRequest({
+      type: "file.upload.request",
+      fileName: "oversized.bin",
+      mimeType: "application/octet-stream",
+      size: 50 * 1024 * 1024 + 1,
+      modifiedAt: "2026-05-02T00:00:00.000Z",
+      requestId: "req-too-large",
+    });
+
+    expect(emitted).toEqual([]);
+    expect(existsSync(join(paseoHome, "uploads"))).toBe(false);
+  });
+
   test("round-trips an upload through transfer frames", async () => {
-    const { subsystem, emitted, paseoHome } = makeSubsystem();
+    const { subsystem, emitted } = makeSubsystem();
 
     subsystem.handleFileUploadRequest({
       type: "file.upload.request",
@@ -593,8 +609,6 @@ describe("WorkspaceFilesSession", () => {
     }
     expect(message.payload.error).toBeNull();
     expect(message.payload.file?.fileName).toBe("notes.txt");
-    expect(readFileSync(join(paseoHome, "uploads", "upload_req-upload", "notes.txt"), "utf8")).toBe(
-      "hello world",
-    );
+    expect(readFileSync(message.payload.file!.path, "utf8")).toBe("hello world");
   });
 });

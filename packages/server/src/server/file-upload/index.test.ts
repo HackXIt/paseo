@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -37,23 +37,41 @@ describe("file uploads", () => {
     await expect(uploads.receiveFrame(uploadChunk("req-upload", "hello"))).resolves.toBeNull();
     await expect(uploads.receiveFrame(uploadChunk("req-upload", " world"))).resolves.toBeNull();
 
-    const path = join(paseoHome, "uploads", "upload_req-upload", "notes.txt");
-    await expect(uploads.receiveFrame(uploadEnds("req-upload"))).resolves.toEqual({
+    const response = await uploads.receiveFrame(uploadEnds("req-upload"));
+    expect(response).toEqual({
       type: "file.upload.response",
       payload: {
         requestId: "req-upload",
         file: {
           type: "uploaded_file",
-          id: "upload_req-upload",
+          id: expect.stringMatching(/^upload_req-upload_[0-9a-f-]{36}$/),
           fileName: "notes.txt",
           mimeType: "text/plain",
           size: 11,
-          path,
+          path: expect.any(String),
         },
         error: null,
       },
     });
-    expect(readFileSync(path, "utf8")).toBe("hello world");
+    const uploadedFile = response!.payload.file!;
+    expect(uploadedFile.path).toBe(join(paseoHome, "uploads", uploadedFile.id, "notes.txt"));
+    expect(readFileSync(uploadedFile.path, "utf8")).toBe("hello world");
+  });
+
+  it("accepts large uploads for providers with native attachment support", () => {
+    const paseoHome = makePaseoHome();
+    const uploads = new FileUploadStore({ paseoHome });
+
+    expect(
+      uploads.beginUpload({
+        type: "file.upload.request",
+        fileName: "large.bin",
+        mimeType: "application/octet-stream",
+        size: 50 * 1024 * 1024 + 1,
+        modifiedAt: "2026-05-02T00:00:00.000Z",
+        requestId: "req-large-native",
+      }),
+    ).toBeNull();
   });
 
   it("rejects chunks beyond the declared size and removes the partial file", async () => {
@@ -70,9 +88,8 @@ describe("file uploads", () => {
     });
     await expect(uploads.receiveFrame(uploadBegins("req-overflow"))).resolves.toBeNull();
 
-    const uploadDir = join(paseoHome, "uploads", "upload_req-overflow");
-    const path = join(uploadDir, "notes.txt");
-    await expect(uploads.receiveFrame(uploadChunk("req-overflow", "hello!"))).resolves.toEqual({
+    const response = await uploads.receiveFrame(uploadChunk("req-overflow", "hello!"));
+    expect(response).toEqual({
       type: "file.upload.response",
       payload: {
         requestId: "req-overflow",
@@ -80,8 +97,7 @@ describe("file uploads", () => {
         error: "Upload exceeded declared size: expected 5, received 6.",
       },
     });
-    expect(existsSync(path)).toBe(false);
-    expect(existsSync(uploadDir)).toBe(false);
+    expect(readdirSync(join(paseoHome, "uploads"))).toEqual([]);
   });
 
   it("preserves chunk order when frames arrive before earlier disk writes finish", async () => {
@@ -106,9 +122,7 @@ describe("file uploads", () => {
 
     expect(results.slice(0, 3)).toEqual([null, null, null]);
     expect(results[3]?.payload.error).toBeNull();
-    expect(readFileSync(join(paseoHome, "uploads", "upload_req-queued", "notes.txt"), "utf8")).toBe(
-      "hello world",
-    );
+    expect(readFileSync(results[3]!.payload.file!.path, "utf8")).toBe("hello world");
   });
 
   it("replaces duplicate upload starts without letting the old stale timeout evict the replacement", async () => {
@@ -139,25 +153,53 @@ describe("file uploads", () => {
     });
     await vi.advanceTimersByTimeAsync(30);
 
-    const path = join(paseoHome, "uploads", "upload_req-duplicate_2", "new.txt");
     await expect(uploads.receiveFrame(uploadBegins("req-duplicate"))).resolves.toBeNull();
     await expect(uploads.receiveFrame(uploadChunk("req-duplicate", "new"))).resolves.toBeNull();
-    await expect(uploads.receiveFrame(uploadEnds("req-duplicate"))).resolves.toEqual({
+    const response = await uploads.receiveFrame(uploadEnds("req-duplicate"));
+    expect(response).toEqual({
       type: "file.upload.response",
       payload: {
         requestId: "req-duplicate",
         file: {
           type: "uploaded_file",
-          id: "upload_req-duplicate_2",
+          id: expect.stringMatching(/^upload_req-duplicate_[0-9a-f-]{36}$/),
           fileName: "new.txt",
           mimeType: "text/plain",
           size: 3,
-          path,
+          path: expect.any(String),
         },
         error: null,
       },
     });
-    expect(readFileSync(path, "utf8")).toBe("new");
+    const uploadedFile = response!.payload.file!;
+    expect(uploadedFile.path).toBe(join(paseoHome, "uploads", uploadedFile.id, "new.txt"));
+    expect(readFileSync(uploadedFile.path, "utf8")).toBe("new");
+  });
+
+  it("does not overwrite a completed upload when a request ID is reused", async () => {
+    const paseoHome = makePaseoHome();
+    const uploads = new FileUploadStore({ paseoHome });
+
+    const upload = async (contents: string) => {
+      uploads.beginUpload({
+        type: "file.upload.request",
+        fileName: "notes.txt",
+        mimeType: "text/plain",
+        size: contents.length,
+        modifiedAt: "2026-05-02T00:00:00.000Z",
+        requestId: "req-reused",
+      });
+      await uploads.receiveFrame(uploadBegins("req-reused"));
+      await uploads.receiveFrame(uploadChunk("req-reused", contents));
+      return (await uploads.receiveFrame(uploadEnds("req-reused")))!.payload.file!;
+    };
+
+    const first = await upload("first");
+    const second = await upload("second");
+
+    expect(second.path).not.toBe(first.path);
+    expect(readFileSync(first.path, "utf8")).toBe("first");
+    expect(readFileSync(second.path, "utf8")).toBe("second");
   });
 
   it("keeps an active upload alive beyond the initial stale timeout", async () => {
@@ -184,23 +226,25 @@ describe("file uploads", () => {
       uploads.receiveFrame(uploadChunk("req-slow-active", " world")),
     ).resolves.toBeNull();
 
-    const path = join(paseoHome, "uploads", "upload_req-slow-active", "notes.txt");
-    await expect(uploads.receiveFrame(uploadEnds("req-slow-active"))).resolves.toEqual({
+    const response = await uploads.receiveFrame(uploadEnds("req-slow-active"));
+    expect(response).toEqual({
       type: "file.upload.response",
       payload: {
         requestId: "req-slow-active",
         file: {
           type: "uploaded_file",
-          id: "upload_req-slow-active",
+          id: expect.stringMatching(/^upload_req-slow-active_[0-9a-f-]{36}$/),
           fileName: "notes.txt",
           mimeType: "text/plain",
           size: 11,
-          path,
+          path: expect.any(String),
         },
         error: null,
       },
     });
-    expect(readFileSync(path, "utf8")).toBe("hello world");
+    const uploadedFile = response!.payload.file!;
+    expect(uploadedFile.path).toBe(join(paseoHome, "uploads", uploadedFile.id, "notes.txt"));
+    expect(readFileSync(uploadedFile.path, "utf8")).toBe("hello world");
   });
 });
 
