@@ -161,14 +161,17 @@ test("DaemonClient uploads file bytes to daemon temp storage", async () => {
       requestId: "req-upload-e2e",
       file: {
         type: "uploaded_file",
-        id: "upload_req-upload-e2e",
+        id: expect.stringMatching(/^upload_req-upload-e2e_[0-9a-f-]{36}$/),
         fileName: "notes.txt",
         mimeType: "text/plain",
         size: 11,
-        path: path.join(daemon.paseoHome, "uploads", "upload_req-upload-e2e", "notes.txt"),
+        path: expect.any(String),
       },
       error: null,
     });
+    expect(result.file?.path).toBe(
+      path.join(daemon.paseoHome, "uploads", result.file!.id, "notes.txt"),
+    );
     await expect(readFile(result.file?.path ?? "", "utf8")).resolves.toBe("hello world");
   } finally {
     await client.close();

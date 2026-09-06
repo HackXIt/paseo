@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { realpath, stat } from "node:fs/promises";
+import { basename, dirname, join, relative, sep } from "node:path";
 
 import type {
   AgentCapabilityFlags,
@@ -7,6 +9,7 @@ import type {
   AgentPermissionRequest,
   AgentPermissionResponse,
   AgentPersistenceHandle,
+  AgentPromptContentBlock,
   AgentPromptInput,
   AgentProvider,
   AgentProviderNotice,
@@ -17,8 +20,9 @@ import type {
   AgentSlashCommand,
   AgentStreamEvent,
 } from "../../agent-sdk-types.js";
-import { runProviderTurn } from "../provider-runner.js";
 import { renderPromptAttachmentAsText } from "../../prompt-attachments.js";
+import { materializeProviderImage } from "../provider-image-output.js";
+import { runProviderTurn } from "../provider-runner.js";
 import {
   encodeHerdrAttachedPiHandle,
   HERDR_ATTACHED_PI_RUNTIME,
@@ -27,6 +31,7 @@ import {
   type HerdrAttachedPiMetadata,
 } from "./herdr-attachment.js";
 import type { HerdrAgent, HerdrClient } from "./herdr-client.js";
+import { resolvePaseoHome } from "../../../paseo-home.js";
 import {
   mapPiNativeHistoryEvents,
   readPiNativeHistory,
@@ -36,6 +41,20 @@ import {
 
 const PI_PROVIDER = "pi";
 const DEFAULT_POLL_INTERVAL_MS = 1_000;
+const MAX_HERDR_ATTACHMENT_BYTES = 50 * 1024 * 1024;
+const MAX_HERDR_MIME_TYPE_LENGTH = 255;
+const MIME_TYPE_PATTERN = /^[A-Za-z0-9!#$%&'*+.^_`|~-]+\/[A-Za-z0-9!#$%&'*+.^_`|~-]+$/;
+const SUPPORTED_HERDR_IMAGE_MIME_TYPES = new Set([
+  "image/avif",
+  "image/bmp",
+  "image/gif",
+  "image/heic",
+  "image/heif",
+  "image/jpeg",
+  "image/png",
+  "image/tiff",
+  "image/webp",
+]);
 
 class HerdrAttachmentIdentityError extends Error {}
 
@@ -57,6 +76,7 @@ interface HerdrAttachedPiSessionOptions {
   metadata: HerdrAttachedPiMetadata;
   config: { cwd: string; model?: string; thinkingOptionId?: string; modeId?: string };
   pollIntervalMs?: number;
+  uploadsRoot?: string;
 }
 
 interface ActiveTurn {
@@ -78,6 +98,7 @@ export class HerdrAttachedPiSession implements AgentSession {
   private readonly config: HerdrAttachedPiSessionOptions["config"];
   private metadata: HerdrAttachedPiMetadata;
   private readonly pollIntervalMs: number;
+  private readonly uploadsRoot: string;
   private pollTimer: NodeJS.Timeout | null = null;
   private pollInFlight = false;
   private closed = false;
@@ -91,6 +112,7 @@ export class HerdrAttachedPiSession implements AgentSession {
     this.metadata = toPersistedHerdrAttachedPiMetadata(options.metadata);
     this.config = options.config;
     this.pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+    this.uploadsRoot = options.uploadsRoot ?? join(resolvePaseoHome(), "uploads");
   }
 
   get id(): string | null {
@@ -125,7 +147,7 @@ export class HerdrAttachedPiSession implements AgentSession {
       throw new Error(`Herdr target ${this.metadata.herdrTarget} is already running`);
     }
 
-    const promptText = renderHerdrPrompt(prompt);
+    const promptText = await renderHerdrPrompt(prompt, this.uploadsRoot);
     const history = await readPiNativeHistory(this.metadata.nativeSessionFile);
     this.assertNativeHistoryMatches(history);
     const turnId = randomUUID();
@@ -491,22 +513,109 @@ export class HerdrAttachedPiSession implements AgentSession {
   }
 }
 
-function renderHerdrPrompt(prompt: AgentPromptInput): string {
+async function renderHerdrPrompt(prompt: AgentPromptInput, uploadsRoot: string): Promise<string> {
   if (typeof prompt === "string") {
     return prompt;
   }
-  return prompt
-    .map((block) => {
-      if (block.type === "text") {
-        return block.text;
-      }
-      if (block.type === "image") {
-        return "[Image attachment omitted: Herdr-attached Pi prompt injection supports text only]";
-      }
-      return renderPromptAttachmentAsText(block);
-    })
-    .filter((part) => part.trim().length > 0)
-    .join("\n\n");
+  const parts: string[] = [];
+  for (const block of prompt) {
+    if (block.type === "text") {
+      parts.push(block.text);
+    } else if (block.type === "image") {
+      const image = validateHerdrImageAttachment(block);
+      const materialized = materializeProviderImage(image);
+      parts.push(
+        [
+          "[Image attachment downgraded to a file reference because Herdr-attached Pi prompt injection supports text only.]",
+          `Saved path: ${materialized.path}`,
+        ].join("\n"),
+      );
+    } else if (block.type === "uploaded_file") {
+      const uploadedFile = await validateHerdrUploadedFile(block, uploadsRoot);
+      parts.push(
+        [
+          "[File attachment downgraded to a file reference because Herdr-attached Pi prompt injection supports text only.]",
+          `File: ${block.fileName}`,
+          `Saved path: ${uploadedFile.path}`,
+          `MIME: ${uploadedFile.mimeType}`,
+          `Size: ${block.size} bytes`,
+        ].join("\n"),
+      );
+    } else {
+      parts.push(renderPromptAttachmentAsText(block));
+    }
+  }
+  return parts.filter((part) => part.trim().length > 0).join("\n\n");
+}
+
+async function validateHerdrUploadedFile(
+  file: Extract<AgentPromptContentBlock, { type: "uploaded_file" }>,
+  uploadsRoot: string,
+): Promise<{ path: string; mimeType: string }> {
+  if (file.size > MAX_HERDR_ATTACHMENT_BYTES) {
+    throw new Error(`File attachment exceeds the ${MAX_HERDR_ATTACHMENT_BYTES}-byte limit`);
+  }
+  const mimeType = file.mimeType.trim().toLowerCase();
+  if (mimeType.length > MAX_HERDR_MIME_TYPE_LENGTH || !MIME_TYPE_PATTERN.test(mimeType)) {
+    throw new Error("Uploaded file has an invalid MIME type");
+  }
+  const [canonicalRoot, canonicalPath] = await Promise.all([
+    realpath(uploadsRoot).catch(() => null),
+    realpath(file.path).catch(() => null),
+  ]);
+  if (!canonicalRoot || !canonicalPath) {
+    throw new Error("Uploaded file is not available in Paseo upload storage");
+  }
+
+  const pathWithinRoot = relative(canonicalRoot, canonicalPath);
+  if (
+    pathWithinRoot === "" ||
+    pathWithinRoot === ".." ||
+    pathWithinRoot.startsWith(`..${sep}`) ||
+    basename(canonicalPath) !== file.fileName ||
+    basename(dirname(canonicalPath)) !== file.id
+  ) {
+    throw new Error("Uploaded file path is not a trusted Paseo upload");
+  }
+
+  const metadata = await stat(canonicalPath);
+  if (!metadata.isFile() || metadata.size !== file.size) {
+    throw new Error("Uploaded file metadata does not match Paseo upload storage");
+  }
+  return { path: canonicalPath, mimeType };
+}
+
+function validateHerdrImageAttachment(
+  image: Extract<AgentPromptContentBlock, { type: "image" }>,
+): Extract<AgentPromptContentBlock, { type: "image" }> {
+  const mimeType = image.mimeType.trim().toLowerCase();
+  if (!SUPPORTED_HERDR_IMAGE_MIME_TYPES.has(mimeType)) {
+    throw new Error(`Unsupported image attachment MIME type: ${image.mimeType}`);
+  }
+
+  const maxBase64Length = Math.ceil(MAX_HERDR_ATTACHMENT_BYTES / 3) * 4;
+  if (image.data.length > maxBase64Length) {
+    throw new Error(`Image attachment exceeds the ${MAX_HERDR_ATTACHMENT_BYTES}-byte limit`);
+  }
+  if (
+    image.data.length === 0 ||
+    image.data.length % 4 !== 0 ||
+    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(image.data)
+  ) {
+    throw new Error("Image attachment is not valid base64 data");
+  }
+
+  let paddingBytes = 0;
+  if (image.data.endsWith("==")) {
+    paddingBytes = 2;
+  } else if (image.data.endsWith("=")) {
+    paddingBytes = 1;
+  }
+  const decodedBytes = (image.data.length / 4) * 3 - paddingBytes;
+  if (decodedBytes > MAX_HERDR_ATTACHMENT_BYTES) {
+    throw new Error(`Image attachment exceeds the ${MAX_HERDR_ATTACHMENT_BYTES}-byte limit`);
+  }
+  return { ...image, mimeType };
 }
 
 function isRunningStatus(status: string | null): boolean {
