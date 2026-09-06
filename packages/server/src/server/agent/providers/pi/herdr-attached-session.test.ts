@@ -18,6 +18,7 @@ import { FakePi } from "./test-utils/fake-pi.js";
 
 class FakeHerdrClient implements HerdrClient {
   agents: HerdrAgent[] = [];
+  details = new Map<string, HerdrAgent>();
   prompts: Array<{ target: string; text: string }> = [];
   interrupts: string[] = [];
 
@@ -26,6 +27,10 @@ class FakeHerdrClient implements HerdrClient {
   }
 
   async getAgent(target: string): Promise<HerdrAgent> {
+    const details = this.details.get(target);
+    if (details) {
+      return details;
+    }
     const agent = this.agents.find(
       (candidate) =>
         candidate.target === target || candidate.name === target || candidate.paneId === target,
@@ -129,6 +134,200 @@ describe("Herdr attached Pi sessions", () => {
         title: "Live Pi: firstmate",
       }),
     ]);
+  });
+
+  test("lists live Herdr Pi sessions with friendly Herdr presentation labels", async () => {
+    const first = await createAttachment();
+    first.metadata.herdrTarget = "w9:p2";
+    first.metadata.herdrPaneId = "w9:p2";
+    const second = await createAttachment();
+    second.metadata.herdrTarget = "w9:p3";
+    second.metadata.herdrPaneId = "w9:p3";
+    second.metadata.nativeSessionId = "second-native-session";
+    second.metadata.cwd = first.metadata.cwd;
+    await writeHistory(second.file, [
+      {
+        type: "session",
+        id: second.metadata.nativeSessionId,
+        timestamp: "2026-06-09T00:00:00.000Z",
+        cwd: second.metadata.cwd,
+      },
+    ]);
+    const copySummary =
+      "Topic finances · Workspace firstmate-finances · Tab fm-copy-review · Pane Review copy worker · Herdr idle";
+    const implementationSummary =
+      "Topic finances · Workspace firstmate-finances · Tab fm-implementation · Pane Implementation worker · Herdr idle";
+    const herdr = new FakeHerdrClient();
+    herdr.agents = [
+      {
+        ...validHerdrAgent(first.metadata, first.file),
+        topic: "finances",
+        workspaceLabel: "firstmate-finances",
+        tabLabel: "fm-copy-review",
+        paneLabel: "Review copy worker",
+      },
+      {
+        ...validHerdrAgent(second.metadata, second.file),
+        topic: "finances",
+        workspaceLabel: "firstmate-finances",
+        tabLabel: "fm-implementation",
+        paneLabel: "Implementation worker",
+      },
+    ];
+    const sessionDir = await mkdtemp(path.join(tmpdir(), "paseo-empty-pi-sessions-"));
+    const client = new PiRpcAgentClient({
+      logger: pino({ level: "silent" }),
+      runtime: new FakePi(),
+      herdrClient: herdr,
+      providerParams: { sessionDir, herdr: { session: first.metadata.herdrSession } },
+    });
+
+    const sessions = await client.listImportableSessions({ limit: 10 });
+
+    expect(sessions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          cwd: first.metadata.cwd,
+          title: "Live Pi: Review copy worker · finances",
+          displayLabel: "Live Pi: Review copy worker · finances",
+          lastPromptPreview: copySummary,
+          summary: copySummary,
+        }),
+        expect.objectContaining({
+          cwd: first.metadata.cwd,
+          title: "Live Pi: Implementation worker · finances",
+          displayLabel: "Live Pi: Implementation worker · finances",
+          lastPromptPreview: implementationSummary,
+          summary: implementationSummary,
+        }),
+      ]),
+    );
+  });
+
+  test("enriches an attachable Herdr list record with friendly detail labels", async () => {
+    const { file, metadata } = await createAttachment();
+    metadata.herdrTarget = "w9:p2";
+    metadata.herdrPaneId = "w9:p2";
+    const summary = validHerdrAgent(metadata, file);
+    const herdr = new FakeHerdrClient();
+    herdr.agents = [summary];
+    herdr.details.set(summary.target, {
+      ...summary,
+      topic: "finances",
+      workspaceLabel: "firstmate-finances",
+      tabLabel: "fm-copy-review",
+      paneLabel: "Review copy worker",
+    });
+    const sessionDir = await mkdtemp(path.join(tmpdir(), "paseo-empty-pi-sessions-"));
+    const client = new PiRpcAgentClient({
+      logger: pino({ level: "silent" }),
+      runtime: new FakePi(),
+      herdrClient: herdr,
+      providerParams: { sessionDir, herdr: { session: metadata.herdrSession } },
+    });
+
+    await expect(client.listImportableSessions({ limit: 10 })).resolves.toEqual([
+      expect.objectContaining({
+        title: "Live Pi: Review copy worker · finances",
+        summary:
+          "Topic finances · Workspace firstmate-finances · Tab fm-copy-review · Pane Review copy worker · Herdr idle",
+      }),
+    ]);
+  });
+
+  test("lists a related live Herdr Pi worker outside the requested cwd", async () => {
+    const { file, metadata } = await createAttachment();
+    metadata.herdrTarget = "w2D:pA";
+    metadata.herdrAlias = "firstmate";
+    metadata.herdrPaneId = "w2D:pA";
+    const workerFile = path.join(path.dirname(file), "worker.jsonl");
+    const workerMetadata: HerdrAttachedPiMetadata = {
+      ...metadata,
+      herdrTarget: "w2D:pC",
+      herdrAlias: "worker",
+      herdrPaneId: "w2D:pC",
+      herdrWorkspaceId: "w2D",
+      nativeSessionId: "worker-native-session",
+      nativeSessionFile: workerFile,
+      cwd: path.join(path.dirname(metadata.cwd), "worker-project"),
+    };
+    await writeHistory(workerFile, [
+      {
+        type: "session",
+        id: workerMetadata.nativeSessionId,
+        timestamp: "2026-06-09T00:00:00.000Z",
+        cwd: workerMetadata.cwd,
+      },
+    ]);
+    const herdr = new FakeHerdrClient();
+    herdr.agents = [validHerdrAgent(metadata, file), validHerdrAgent(workerMetadata, workerFile)];
+    const sessionDir = await mkdtemp(path.join(tmpdir(), "paseo-empty-pi-sessions-"));
+    const client = new PiRpcAgentClient({
+      logger: pino({ level: "silent" }),
+      runtime: new FakePi(),
+      herdrClient: herdr,
+      providerParams: { sessionDir, herdr: { session: metadata.herdrSession } },
+    });
+
+    await expect(client.listImportableSessions({ cwd: metadata.cwd, limit: 10 })).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          providerHandleId: encodeHerdrAttachedPiHandle(workerMetadata),
+          cwd: workerMetadata.cwd,
+          title: "Live Pi: worker",
+        }),
+      ]),
+    );
+  });
+
+  test("excludes a same-alias worker from another Herdr workspace", async () => {
+    const { file, metadata } = await createAttachment();
+    metadata.herdrTarget = "firstmate";
+    metadata.herdrAlias = "firstmate";
+    metadata.herdrPaneId = "w2D:pA";
+    metadata.herdrWorkspaceId = "w2D";
+    const workerFile = path.join(path.dirname(file), "unrelated-worker.jsonl");
+    const workerMetadata: HerdrAttachedPiMetadata = {
+      ...metadata,
+      herdrTarget: "w9Z:pC",
+      herdrAlias: "worker",
+      herdrPaneId: "w9Z:pC",
+      herdrWorkspaceId: "w9Z",
+      herdrParentTarget: "firstmate",
+      nativeSessionId: "unrelated-worker-native-session",
+      nativeSessionFile: workerFile,
+      cwd: path.join(path.dirname(metadata.cwd), "unrelated-worker-project"),
+    };
+    await writeHistory(workerFile, [
+      {
+        type: "session",
+        id: workerMetadata.nativeSessionId,
+        timestamp: "2026-06-09T00:00:00.000Z",
+        cwd: workerMetadata.cwd,
+      },
+    ]);
+    const herdr = new FakeHerdrClient();
+    herdr.agents = [
+      { ...validHerdrAgent(metadata, file), herdrWorkspaceId: "w2D" },
+      {
+        ...validHerdrAgent(workerMetadata, workerFile),
+        herdrWorkspaceId: "w9Z",
+        parentTarget: "firstmate",
+      },
+    ];
+    const sessionDir = await mkdtemp(path.join(tmpdir(), "paseo-empty-pi-sessions-"));
+    const client = new PiRpcAgentClient({
+      logger: pino({ level: "silent" }),
+      runtime: new FakePi(),
+      herdrClient: herdr,
+      providerParams: { sessionDir, herdr: { session: metadata.herdrSession } },
+    });
+
+    const sessions = await client.listImportableSessions({ cwd: metadata.cwd, limit: 10 });
+
+    expect(sessions.map((session) => session.providerHandleId)).not.toContain(
+      encodeHerdrAttachedPiHandle(workerMetadata),
+    );
   });
 
   test("does not probe Herdr during managed Pi imports unless enabled", async () => {
@@ -491,6 +690,52 @@ describe("Herdr attached Pi sessions", () => {
     await session.close();
 
     expect(herdr.prompts).toEqual([]);
+  });
+
+  test("does not synthesize a parent turn from ambiguous Herdr aggregate activity", async () => {
+    const { file, metadata } = await createAttachment();
+    const herdr = new FakeHerdrClient();
+    herdr.agents = [{ ...validHerdrAgent(metadata, file), status: "working" }];
+    const session = new HerdrAttachedPiSession({
+      herdrClient: herdr,
+      metadata,
+      config: { cwd: metadata.cwd },
+      pollIntervalMs: 60_000,
+    });
+    const events: AgentStreamEvent[] = [];
+    session.subscribe((event) => events.push(event));
+
+    await session.reconcileHistory();
+    await expect(session.startTurn("unsafe until own status exists")).rejects.toThrow(
+      "Herdr target firstmate is already running",
+    );
+    await session.close();
+
+    expect(events).not.toContainEqual(expect.objectContaining({ type: "turn_started" }));
+    expect(herdr.prompts).toEqual([]);
+  });
+
+  test("does not mark a parent turn active when only descendant Herdr activity is running", async () => {
+    const { file, metadata } = await createAttachment();
+    const herdr = new FakeHerdrClient();
+    herdr.agents = [{ ...validHerdrAgent(metadata, file), status: "working", ownStatus: "idle" }];
+    const session = new HerdrAttachedPiSession({
+      herdrClient: herdr,
+      metadata,
+      config: { cwd: metadata.cwd },
+      pollIntervalMs: 60_000,
+    });
+    const events: AgentStreamEvent[] = [];
+    session.subscribe((event) => events.push(event));
+
+    await session.reconcileHistory();
+    await expect(session.startTurn("parent prompt")).resolves.toEqual({
+      turnId: expect.any(String),
+    });
+    await session.close();
+
+    expect(events).not.toContainEqual(expect.objectContaining({ type: "turn_started" }));
+    expect(herdr.prompts).toEqual([{ target: "firstmate", text: "parent prompt" }]);
   });
 
   test("refuses prompt injection while the original Pi is already running", async () => {

@@ -1753,6 +1753,8 @@ export class VoiceAssistantWebSocketServer {
         providerRemoval: true,
         // COMPAT(importSessionWorkspaceTarget): added in v0.1.110, remove gate after 2027-01-16.
         importSessionWorkspaceTarget: true,
+        // COMPAT(importSessionRelatedCwd): added in v0.7.0-beta.1, remove gate after 2027-03-01.
+        importSessionRelatedCwd: true,
         // COMPAT(forgeProviders): added in v0.2.0-beta.1. Drop the gate after
         // 2027-01-17 once the supported daemon floor is >= v0.2.0.
         forgeProviders: true,

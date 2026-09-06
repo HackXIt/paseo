@@ -284,6 +284,10 @@ export function toRecentProviderSessionDescriptorPayload(
     firstPromptPreview: session.firstPromptPreview,
     lastPromptPreview: session.lastPromptPreview,
     lastActivityAt: session.lastActivityAt.toISOString(),
+    ...(session.displayLabel ? { displayLabel: session.displayLabel } : {}),
+    ...(session.summary ? { summary: session.summary } : {}),
+    ...(session.debugIdentifier ? { debugIdentifier: session.debugIdentifier } : {}),
+    ...(session.relatedToRequestedCwd ? { relatedToRequestedCwd: true } : {}),
   };
 }
 

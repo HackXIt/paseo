@@ -206,6 +206,7 @@ function ImportSessionSheetRow({
   const { t } = useTranslation();
   const title = getSessionTitle(entry);
   const promptPreview = getPromptPreview(entry);
+  const debugDetails = [entry.debugIdentifier?.trim(), entry.cwd].filter(Boolean).join(" · ");
   const lastActivity = formatTimeAgo(new Date(entry.lastActivityAt));
   const ProviderIcon = getProviderIcon(entry.providerId);
   const accessibilityState = useMemo(
@@ -248,9 +249,9 @@ function ImportSessionSheetRow({
         <Text style={styles.rowPreview} numberOfLines={2}>
           {promptPreview}
         </Text>
-        {showCwd && entry.cwd ? (
+        {entry.debugIdentifier || (showCwd && entry.cwd) ? (
           <Text style={styles.rowCwd} numberOfLines={1}>
-            {entry.cwd}
+            {debugDetails}
           </Text>
         ) : null}
       </View>
@@ -277,6 +278,7 @@ export function ImportSessionSheet({
     enabled: visible,
   });
   const supportsWorkspaceTarget = useHostFeature(serverId, "importSessionWorkspaceTarget");
+  const supportsRelatedCwd = useHostFeature(serverId, "importSessionRelatedCwd");
   const requiresHostUpgrade = requiresImportSessionsHostUpgrade({
     supportsSnapshot,
     workspaceId,
@@ -414,11 +416,15 @@ export function ImportSessionSheet({
       if (!entry.cwd) {
         throw new Error("Session is missing a working directory");
       }
+      const targetWorkspaceId =
+        workspaceId && !(supportsRelatedCwd && entry.relatedToRequestedCwd === true)
+          ? workspaceId
+          : undefined;
       const agent = await client.importAgent({
         providerId: entry.providerId,
         providerHandleId: entry.providerHandleId,
         cwd: entry.cwd,
-        ...(workspaceId ? { workspaceId } : {}),
+        ...(targetWorkspaceId ? { workspaceId: targetWorkspaceId } : {}),
       });
       return agent;
     },

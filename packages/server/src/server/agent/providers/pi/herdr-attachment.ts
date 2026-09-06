@@ -12,6 +12,8 @@ export interface HerdrAttachedPiMetadata extends AgentMetadata {
   herdrTarget: string;
   herdrAlias?: string;
   herdrPaneId?: string;
+  herdrWorkspaceId?: string;
+  herdrParentTarget?: string;
   nativeSessionId: string;
   nativeSessionFile: string;
   cwd: string;
@@ -69,6 +71,8 @@ export function parseHerdrAttachedPiMetadata(
 
   const herdrAlias = readString(metadata.herdrAlias);
   const herdrPaneId = readString(metadata.herdrPaneId);
+  const herdrWorkspaceId = readString(metadata.herdrWorkspaceId);
+  const herdrParentTarget = readString(metadata.herdrParentTarget);
   const lastSyncedNativeEntryId = readString(metadata.lastSyncedNativeEntryId);
   return {
     runtime: HERDR_ATTACHED_PI_RUNTIME,
@@ -76,6 +80,8 @@ export function parseHerdrAttachedPiMetadata(
     herdrTarget,
     ...(herdrAlias ? { herdrAlias } : {}),
     ...(herdrPaneId ? { herdrPaneId } : {}),
+    ...(herdrWorkspaceId ? { herdrWorkspaceId } : {}),
+    ...(herdrParentTarget ? { herdrParentTarget } : {}),
     nativeSessionId,
     nativeSessionFile,
     cwd,
@@ -92,6 +98,8 @@ export function toPersistedHerdrAttachedPiMetadata(
     herdrTarget: metadata.herdrTarget,
     ...(metadata.herdrAlias ? { herdrAlias: metadata.herdrAlias } : {}),
     ...(metadata.herdrPaneId ? { herdrPaneId: metadata.herdrPaneId } : {}),
+    ...(metadata.herdrWorkspaceId ? { herdrWorkspaceId: metadata.herdrWorkspaceId } : {}),
+    ...(metadata.herdrParentTarget ? { herdrParentTarget: metadata.herdrParentTarget } : {}),
     nativeSessionId: metadata.nativeSessionId,
     nativeSessionFile: metadata.nativeSessionFile,
     cwd: metadata.cwd,
