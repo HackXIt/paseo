@@ -1,5 +1,5 @@
 import { spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, unlinkSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { loadConfig, resolvePaseoHome, spawnProcess } from "@getpaseo/server";
@@ -335,6 +335,15 @@ async function signalProcessTreeSafely(pid: number, signal: NodeJS.Signals): Pro
     return false;
   }
 
+  if (process.platform === "linux") {
+    const descendants = collectLinuxDescendantPids(pid);
+    let signaled = false;
+    for (const descendantPid of descendants.toReversed()) {
+      signaled = signalProcessSafely(descendantPid, signal) || signaled;
+    }
+    return signalProcessSafely(pid, signal) || signaled;
+  }
+
   return new Promise((resolve, reject) => {
     treeKill(pid, signal, (err) => {
       if (!err) {
@@ -354,6 +363,38 @@ async function signalProcessTreeSafely(pid: number, signal: NodeJS.Signals): Pro
       reject(err);
     });
   });
+}
+
+function collectLinuxDescendantPids(rootPid: number): number[] {
+  const childrenByParent = new Map<number, number[]>();
+  try {
+    for (const entry of readdirSync("/proc", { withFileTypes: true })) {
+      if (!entry.isDirectory() || !/^\d+$/u.test(entry.name)) continue;
+      const childPid = Number.parseInt(entry.name, 10);
+      try {
+        const status = readFileSync(`/proc/${entry.name}/status`, "utf8");
+        const parentPid = Number.parseInt(/^PPid:\s+(\d+)$/mu.exec(status)?.[1] ?? "", 10);
+        if (!Number.isInteger(parentPid)) continue;
+        const children = childrenByParent.get(parentPid) ?? [];
+        children.push(childPid);
+        childrenByParent.set(parentPid, children);
+      } catch {
+        // Processes can exit while /proc is being traversed.
+      }
+    }
+  } catch {
+    return [];
+  }
+
+  const descendants: number[] = [];
+  const pending = [...(childrenByParent.get(rootPid) ?? [])];
+  while (pending.length > 0) {
+    const childPid = pending.pop();
+    if (childPid === undefined) continue;
+    descendants.push(childPid);
+    pending.push(...(childrenByParent.get(childPid) ?? []));
+  }
+  return descendants;
 }
 
 async function signalProcessTreeOrOwnerSafely(

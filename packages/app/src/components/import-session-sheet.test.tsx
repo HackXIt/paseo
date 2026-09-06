@@ -163,12 +163,17 @@ vi.mock("@/hooks/use-providers-snapshot", () => ({
   }),
 }));
 
+vi.mock("@/runtime/host-features", () => ({
+  useHostFeature: () => true,
+}));
+
 interface RenderOptions {
   visible?: boolean;
   onClose?: () => void;
   onImportedAgent?: (agentId: string) => void;
   onImported?: (agent: Awaited<ReturnType<DaemonClient["importAgent"]>>) => void;
   cwd?: string | null;
+  workspaceId?: string | null;
   snapshot?: {
     entries?: ProviderSnapshotEntry[];
     supportsSnapshot?: boolean;
@@ -200,6 +205,9 @@ function renderSheet(
         client={client}
         serverId="server-1"
         cwd={cwd}
+        workspaceId={
+          options && "workspaceId" in options ? (options.workspaceId ?? undefined) : undefined
+        }
         onClose={options?.onClose ?? vi.fn()}
         onImportedAgent={options?.onImportedAgent ?? vi.fn()}
         onImported={options?.onImported}
@@ -515,6 +523,77 @@ describe("ImportSessionSheet", () => {
     });
     expect(onImportedAgent).toHaveBeenCalledWith("agent-imported");
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("omits the workspace target when importing a related live session from another cwd", async () => {
+    const fetchRecentProviderSessions = vi.fn(async () => ({
+      requestId: "recent-provider-sessions",
+      entries: [
+        createProviderSessionEntry({
+          providerId: "pi",
+          providerLabel: "Pi",
+          providerHandleId: "herdr-worker-handle",
+          cwd: "/repo/paseo-worker",
+          title: "Live Pi: worker",
+          relatedToRequestedCwd: true,
+        }),
+      ],
+    }));
+    const importAgent = vi.fn(async () => createImportedAgentSnapshot("agent-imported"));
+
+    renderSheet(
+      { fetchRecentProviderSessions, importAgent } as Pick<
+        DaemonClient,
+        "fetchRecentProviderSessions" | "importAgent"
+      >,
+      {
+        cwd: "/repo/paseo",
+        workspaceId: "workspace-parent",
+        snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("pi")] },
+      },
+    );
+
+    fireEvent.click(await screen.findByTestId("import-session-session-pi-herdr-worker-handle"));
+
+    await waitFor(() => {
+      expect(importAgent).toHaveBeenCalledWith({
+        providerId: "pi",
+        providerHandleId: "herdr-worker-handle",
+        cwd: "/repo/paseo-worker",
+      });
+    });
+  });
+
+  it("shows Herdr identifiers and execution paths in scoped import rows", async () => {
+    const fetchRecentProviderSessions = vi.fn(async () => ({
+      requestId: "recent-provider-sessions",
+      entries: [
+        createProviderSessionEntry({
+          providerId: "pi",
+          providerLabel: "Pi",
+          providerHandleId: "encoded-herdr-handle",
+          cwd: "/repo/paseo-worker",
+          displayLabel: "Live Pi: Review copy worker · finances",
+          summary: "Topic finances · Pane Review copy worker · Herdr idle",
+          debugIdentifier: "w2M:p1",
+        }),
+      ],
+    }));
+
+    renderSheet(
+      { fetchRecentProviderSessions, importAgent: vi.fn() } as Pick<
+        DaemonClient,
+        "fetchRecentProviderSessions" | "importAgent"
+      >,
+      {
+        cwd: "/repo/paseo",
+        snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("pi")] },
+      },
+    );
+
+    expect(await screen.findByText("Live Pi: Review copy worker · finances")).toBeTruthy();
+    expect(screen.getByText("Topic finances · Pane Review copy worker · Herdr idle")).toBeTruthy();
+    expect(screen.getByText("w2M:p1 · /repo/paseo-worker")).toBeTruthy();
   });
 
   it("shows an import error state without closing when selected session import fails", async () => {

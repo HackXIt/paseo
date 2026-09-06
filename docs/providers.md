@@ -69,7 +69,7 @@ Pi MCP support depends on the open-source `pi-mcp-adapter` extension being loade
 
 Pi import discovery reads Pi's persisted JSONL session files because Pi RPC does not expose a recent-session listing command. Resume and full history hydration still go through `pi --mode rpc` using the session file as `nativeHandle`.
 
-Pi also supports attaching to an already-running Pi target hosted by Herdr while keeping `provider=pi`; see [Herdr-attached Pi sessions](custom-providers.md#herdr-attached-pi-sessions) for setup. The persisted handle sets `metadata.runtime` to `herdr-attached` and records the Herdr session/target, pane id when available, native Pi session id/file, and cwd. Attached sessions send prompts and interrupts through Herdr, read canonical history from the native Pi JSONL, and refuse to reconnect or send when the Herdr target is missing, non-Pi, or no longer matches the persisted native session. MVP sync is final-history reconciliation; token streaming stays with managed `pi --mode rpc` sessions.
+Pi also supports attaching to an already-running Pi target hosted by Herdr while keeping `provider=pi`; see [Herdr-attached Pi sessions](custom-providers.md#herdr-attached-pi-sessions) for setup, import relationships, and activity semantics.
 
 OMP is a first-class built-in provider, disabled by default. Its launch contract, typed runtime, agent/session behavior, history, permissions, imports, and test fake live under `providers/omp/`; only the provider-neutral JSONL child-process transport is shared with Pi. It launches `omp --mode rpc-ui`, uses OMP's `get_available_commands` RPC for slash-command discovery, bridges OMP `rpc-ui` approval dialogs into Paseo permissions, and imports terminal-started sessions from `~/.omp/agent/sessions` when enabled.
 

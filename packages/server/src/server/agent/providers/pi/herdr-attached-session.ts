@@ -118,10 +118,11 @@ export class HerdrAttachedPiSession implements AgentSession {
     }
     const target = await this.verifyTarget();
     this.offlineError = null;
-    if (isBlockedStatus(target.status)) {
+    const turnStatus = getHerdrOwnTurnStatus(target);
+    if (isBlockedStatus(turnStatus)) {
       throw new Error(`Herdr target ${this.metadata.herdrTarget} is blocked`);
     }
-    if (this.externalTurnId || isRunningStatus(target.status)) {
+    if (this.externalTurnId || isRunningStatus(turnStatus)) {
       throw new Error(`Herdr target ${this.metadata.herdrTarget} is already running`);
     }
 
@@ -195,8 +196,9 @@ export class HerdrAttachedPiSession implements AgentSession {
       this.emitNativeEvents(events, afterTurnBaseline);
       this.observeNativeProgressAfterSubmittedEntry(history.entries);
       this.rememberLastSyncedEntry(events);
-      this.completeActiveTurnIfIdle(target.status);
-      this.completeExternalTurnIfIdle(target.status);
+      const turnStatus = getHerdrOwnTurnStatus(target);
+      this.completeActiveTurnIfIdle(turnStatus);
+      this.completeExternalTurnIfIdle(turnStatus);
       this.offlineError = null;
     } catch (error) {
       if (error instanceof HerdrAttachmentIdentityError) {
@@ -225,6 +227,7 @@ export class HerdrAttachedPiSession implements AgentSession {
         herdrSession: this.metadata.herdrSession,
         herdrTarget: this.metadata.herdrTarget,
         herdrStatus: target.status,
+        ...(target.ownStatus ? { herdrOwnStatus: target.ownStatus } : {}),
         nativeSessionFile: this.metadata.nativeSessionFile,
       },
     };
@@ -328,12 +331,17 @@ export class HerdrAttachedPiSession implements AgentSession {
   }
 
   private reconcileHerdrStatus(target: HerdrAgent): void {
-    if (isBlockedStatus(target.status)) {
+    // Legacy Herdr status can roll up descendants, so it is not a parent turn source.
+    if (!target.ownStatus) {
+      return;
+    }
+    const turnStatus = target.ownStatus;
+    if (isBlockedStatus(turnStatus)) {
       throw new HerdrAttachmentIdentityError(
         `Herdr target ${this.metadata.herdrTarget} is blocked`,
       );
     }
-    if (!this.activeTurn && !this.externalTurnId && isRunningStatus(target.status)) {
+    if (!this.activeTurn && !this.externalTurnId && isRunningStatus(turnStatus)) {
       this.externalTurnId = randomUUID();
       this.emit({ type: "turn_started", provider: this.provider, turnId: this.externalTurnId });
     }
@@ -507,6 +515,10 @@ function renderHerdrPrompt(prompt: AgentPromptInput): string {
     })
     .filter((part) => part.trim().length > 0)
     .join("\n\n");
+}
+
+function getHerdrOwnTurnStatus(target: HerdrAgent): string | null {
+  return target.ownStatus ?? target.status;
 }
 
 function isRunningStatus(status: string | null): boolean {

@@ -192,6 +192,17 @@ describe("collectErroredProviderLabels", () => {
 });
 
 describe("getSessionTitle", () => {
+  it("prefers the trimmed daemon display label", () => {
+    expect(
+      getSessionTitle(
+        entry({
+          title: "Live Pi: w2M:p1",
+          displayLabel: "  Live Pi: Review copy worker · finances  ",
+        }),
+      ),
+    ).toBe("Live Pi: Review copy worker · finances");
+  });
+
   it("prefers the trimmed title", () => {
     expect(getSessionTitle(entry({ title: "  Importable  " }))).toBe("Importable");
   });
@@ -208,6 +219,17 @@ describe("getSessionTitle", () => {
 });
 
 describe("getPromptPreview", () => {
+  it("prefers the trimmed daemon summary", () => {
+    expect(
+      getPromptPreview(
+        entry({
+          summary: "  Topic finances · Tab fm-copy-review · Pane Review copy worker · Herdr idle  ",
+          lastPromptPreview: "Herdr idle",
+        }),
+      ),
+    ).toBe("Topic finances · Tab fm-copy-review · Pane Review copy worker · Herdr idle");
+  });
+
   it("prefers the trimmed last prompt preview", () => {
     expect(
       getPromptPreview(

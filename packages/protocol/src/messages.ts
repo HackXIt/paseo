@@ -880,6 +880,10 @@ export const RecentProviderSessionDescriptorPayloadSchema = z.object({
   firstPromptPreview: z.string().nullable(),
   lastPromptPreview: z.string().nullable(),
   lastActivityAt: z.string(),
+  displayLabel: z.string().nullable().optional(),
+  summary: z.string().nullable().optional(),
+  debugIdentifier: z.string().nullable().optional(),
+  relatedToRequestedCwd: z.boolean().optional(),
 });
 
 export type RecentProviderSessionDescriptorPayload = z.infer<
@@ -3442,6 +3446,8 @@ export const ServerInfoStatusPayloadSchema = z
         providerRemoval: z.boolean().optional(),
         // COMPAT(importSessionWorkspaceTarget): added in v0.1.110, remove gate after 2027-01-16.
         importSessionWorkspaceTarget: z.boolean().optional(),
+        // COMPAT(importSessionRelatedCwd): added in v0.7.0-beta.1, remove gate after 2027-03-01.
+        importSessionRelatedCwd: z.boolean().optional(),
         // COMPAT(forgeProviders): added in v0.2.0-beta.1. Drop the gate after
         // 2027-01-17 once the supported daemon floor is >= v0.2.0.
         // Daemon advertises pluggable non-GitHub forge support (the forge registry);
