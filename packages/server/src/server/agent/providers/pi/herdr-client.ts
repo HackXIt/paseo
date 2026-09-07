@@ -261,6 +261,8 @@ interface HerdrPresentationPayloads {
   panes: unknown | null;
 }
 
+const LOW_INFORMATION_HERDR_LABELS = new Set(["1", "default", "firstmate", "worker"]);
+
 function enrichHerdrPresentation(
   agents: HerdrAgent[],
   payloads: HerdrPresentationPayloads,
@@ -276,12 +278,27 @@ function enrichHerdrPresentation(
     const tab = agent.tabId ? tabsById.get(agent.tabId) : undefined;
     const pane = agent.paneId ? panesById.get(agent.paneId) : undefined;
     const tokens = workspace ? readRecordField(workspace, "tokens") : null;
-    const taskLabel = readFirstString(tokens, ["task", "taskName", "task_name"]);
-    const workspaceLabel = agent.workspaceLabel ?? readFirstString(workspace, ["label", "name"]);
+    const taskLabel = preferUsefulHerdrLabel(
+      agent.taskLabel,
+      readFirstString(tokens, ["task", "taskName", "task_name"]),
+    );
+    const workspaceLabel = preferUsefulHerdrLabel(
+      agent.workspaceLabel,
+      readFirstString(workspace, ["label", "name"]),
+    );
     const reportedTopic = readFirstString(tokens, ["topic", "topicName", "topic_name"]);
-    const topic = agent.topic ?? reportedTopic ?? deriveFirstmateTopicLabel(workspaceLabel);
-    const tabLabel = agent.tabLabel ?? readFirstString(tab, ["label", "name"]);
-    const paneLabel = agent.paneLabel ?? readFirstString(pane, ["label", "name"]);
+    const topic = preferUsefulHerdrLabel(
+      agent.topic,
+      reportedTopic ?? deriveFirstmateTopicLabel(workspaceLabel),
+    );
+    const tabLabel = preferUsefulHerdrLabel(
+      agent.tabLabel,
+      readFirstString(tab, ["label", "name"]),
+    );
+    const paneLabel = preferUsefulHerdrLabel(
+      agent.paneLabel,
+      readFirstString(pane, ["label", "name"]),
+    );
 
     return {
       ...agent,
@@ -294,7 +311,26 @@ function enrichHerdrPresentation(
   });
 }
 
-function deriveFirstmateTopicLabel(workspaceLabel: string | null): string | null {
+function preferUsefulHerdrLabel(
+  existing: string | undefined,
+  enriched: string | null,
+): string | undefined {
+  if (isUsefulHerdrLabel(existing)) {
+    return existing;
+  }
+  return isUsefulHerdrLabel(enriched) ? enriched : (existing ?? enriched ?? undefined);
+}
+
+function isUsefulHerdrLabel(value: string | null | undefined): value is string {
+  const normalized = value?.trim();
+  return Boolean(
+    normalized &&
+      !/^FIRSTMATE_OP:\s*v\d+\b/iu.test(normalized) &&
+      !LOW_INFORMATION_HERDR_LABELS.has(normalized.toLowerCase()),
+  );
+}
+
+function deriveFirstmateTopicLabel(workspaceLabel: string | null | undefined): string | null {
   const match = /^firstmate-(.+)$/iu.exec(workspaceLabel ?? "");
   if (!match) {
     return null;

@@ -185,6 +185,10 @@ const payloads = {
     pane_id: "w1:p1",
     tab_id: "w1:t1",
     workspace_id: "w1",
+    topic: "firstmate",
+    workspace_label: "firstmate",
+    tab_label: "firstmate",
+    pane_label: "firstmate",
     agent_session: { id: "native-pi-session", value: "/tmp/pi/native.jsonl" }
   }, {
     agent: "pi",
