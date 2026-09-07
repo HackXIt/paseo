@@ -97,7 +97,7 @@ export function collectErroredProviderLabels(
   return labels;
 }
 
-const FIRSTMATE_OPERATION_PREFIX = /^FIRSTMATE_OP:\s*v\d+\b/iu;
+const FIRSTMATE_OPERATION_PREFIX = /^FIRSTMATE_OP:/iu;
 
 export function getSessionTitle(entry: FetchRecentProviderSessionEntry): string {
   const titleCandidates = [entry.displayLabel, entry.title, entry.firstPromptPreview];

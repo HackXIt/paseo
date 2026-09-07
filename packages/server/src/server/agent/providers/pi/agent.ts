@@ -195,11 +195,24 @@ function getHerdrWorkspaceId(agent: HerdrAgent): string | null {
 }
 
 function mergeHerdrAgentDetails(agent: HerdrAgent, details: HerdrAgent): HerdrAgent {
-  return Object.assign(
+  const merged = Object.assign(
     {},
     agent,
     Object.fromEntries(Object.entries(details).filter(([, value]) => value != null)),
   );
+  const presentationKeys = [
+    "taskLabel",
+    "topic",
+    "workspaceLabel",
+    "tabLabel",
+    "paneLabel",
+  ] as const;
+  for (const key of presentationKeys) {
+    if (isUsefulHerdrDisplayLabel(agent[key]) && !isUsefulHerdrDisplayLabel(details[key])) {
+      merged[key] = agent[key];
+    }
+  }
+  return merged;
 }
 
 function buildHerdrImportDisplay(agent: HerdrAgent): { title: string; summary: string } {
@@ -263,7 +276,7 @@ function isUsefulHerdrDisplayLabel(value: string | undefined): value is string {
 
 function normalizeHerdrDisplayText(value: string | undefined): string | null {
   const trimmed = value?.trim();
-  if (!trimmed || /^FIRSTMATE_OP:\s*v\d+\b/iu.test(trimmed)) {
+  if (!trimmed || /^FIRSTMATE_OP:/iu.test(trimmed)) {
     return null;
   }
   return trimmed;

@@ -325,7 +325,7 @@ function isUsefulHerdrLabel(value: string | null | undefined): value is string {
   const normalized = value?.trim();
   return Boolean(
     normalized &&
-      !/^FIRSTMATE_OP:\s*v\d+\b/iu.test(normalized) &&
+      !/^FIRSTMATE_OP:/iu.test(normalized) &&
       !LOW_INFORMATION_HERDR_LABELS.has(normalized.toLowerCase()),
   );
 }

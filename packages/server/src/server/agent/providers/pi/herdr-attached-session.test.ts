@@ -165,7 +165,7 @@ describe("Herdr attached Pi sessions", () => {
         topic: "Herdr import UX polish",
         workspaceLabel: "firstmate-herdr-import-ux-polish",
         tabLabel: "fm-server-title",
-        paneLabel: "FIRSTMATE_OP: v1 launch-brief: You are a crewmate",
+        paneLabel: "FIRSTMATE_OP: launch-brief: You are a crewmate",
       },
       {
         ...validHerdrAgent(second.metadata, second.file),
@@ -206,19 +206,27 @@ describe("Herdr attached Pi sessions", () => {
     );
   });
 
-  test("enriches an attachable Herdr list record with friendly detail labels", async () => {
+  test("preserves friendly list labels over generic detail labels", async () => {
     const { file, metadata } = await createAttachment();
     metadata.herdrTarget = "w9:p2";
     metadata.herdrPaneId = "w9:p2";
     const summary = validHerdrAgent(metadata, file);
     const herdr = new FakeHerdrClient();
-    herdr.agents = [summary];
+    herdr.agents = [
+      {
+        ...summary,
+        topic: "finances",
+        workspaceLabel: "firstmate-finances",
+        tabLabel: "fm-copy-review",
+        paneLabel: "Review copy worker",
+      },
+    ];
     herdr.details.set(summary.target, {
       ...summary,
-      topic: "finances",
-      workspaceLabel: "firstmate-finances",
-      tabLabel: "fm-copy-review",
-      paneLabel: "Review copy worker",
+      topic: "firstmate",
+      workspaceLabel: "firstmate",
+      tabLabel: "firstmate",
+      paneLabel: "firstmate",
     });
     const sessionDir = await mkdtemp(path.join(tmpdir(), "paseo-empty-pi-sessions-"));
     const client = new PiRpcAgentClient({

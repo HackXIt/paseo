@@ -271,7 +271,7 @@ export function toAgentListItemPayload(agent: AgentSnapshotPayload): AgentListIt
   };
 }
 
-const FIRSTMATE_OPERATION_PREFIX = /^FIRSTMATE_OP:\s*v\d+\b/iu;
+const FIRSTMATE_OPERATION_PREFIX = /^FIRSTMATE_OP:/iu;
 
 export function toRecentProviderSessionDescriptorPayload(
   session: ImportableProviderSession & { provider: string },

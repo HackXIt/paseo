@@ -505,7 +505,7 @@ describe("toRecentProviderSessionDescriptorPayload", () => {
   });
 
   it("suppresses Firstmate launch text from import row display fields", () => {
-    const launchBrief = "FIRSTMATE_OP: v1 launch-brief: You are a crewmate";
+    const launchBrief = "FIRSTMATE_OP: launch-brief: You are a crewmate";
     const session: ImportableProviderSession & { provider: string } = {
       provider: "pi",
       providerHandleId: "provider-session-id",
