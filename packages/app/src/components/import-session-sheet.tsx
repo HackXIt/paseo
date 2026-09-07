@@ -24,6 +24,7 @@ import {
   collectErroredProviderLabels,
   computeEmptyState,
   getPromptPreview,
+  getSessionDebugDetails,
   getSessionTitle,
   PER_PROVIDER_LIMIT,
   resolveProvidersToFetch,
@@ -206,7 +207,7 @@ function ImportSessionSheetRow({
   const { t } = useTranslation();
   const title = getSessionTitle(entry);
   const promptPreview = getPromptPreview(entry);
-  const debugDetails = [entry.debugIdentifier?.trim(), entry.cwd].filter(Boolean).join(" · ");
+  const debugDetails = getSessionDebugDetails(entry, showCwd);
   const lastActivity = formatTimeAgo(new Date(entry.lastActivityAt));
   const ProviderIcon = getProviderIcon(entry.providerId);
   const accessibilityState = useMemo(
@@ -249,7 +250,7 @@ function ImportSessionSheetRow({
         <Text style={styles.rowPreview} numberOfLines={2}>
           {promptPreview}
         </Text>
-        {entry.debugIdentifier || (showCwd && entry.cwd) ? (
+        {debugDetails ? (
           <Text style={styles.rowCwd} numberOfLines={1}>
             {debugDetails}
           </Text>

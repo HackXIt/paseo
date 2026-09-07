@@ -144,7 +144,7 @@ interface HerdrRelatedImportScope {
   workspaceIds: ReadonlySet<string>;
 }
 
-const LOW_INFORMATION_HERDR_LABELS = new Set(["1", "default", "firstmate"]);
+const LOW_INFORMATION_HERDR_LABELS = new Set(["1", "default", "firstmate", "worker"]);
 
 function createHerdrRelatedImportScope(
   agents: readonly HerdrAgent[],
@@ -205,8 +205,9 @@ function mergeHerdrAgentDetails(agent: HerdrAgent, details: HerdrAgent): HerdrAg
 function buildHerdrImportDisplay(agent: HerdrAgent): { title: string; summary: string } {
   const primary = selectHerdrPrimaryLabel(agent);
   const context = selectHerdrContextLabel(agent, primary);
-  const title = `Live Pi: ${context ? `${primary} · ${context}` : primary}`;
+  const title = context ? `${primary} · ${context}` : primary;
   const summaryParts: string[] = [];
+  addHerdrSummaryPart(summaryParts, "Task", agent.taskLabel);
   addHerdrSummaryPart(summaryParts, "Topic", agent.topic);
   addHerdrSummaryPart(summaryParts, "Workspace", agent.workspaceLabel);
   addHerdrSummaryPart(summaryParts, "Tab", agent.tabLabel);
@@ -217,20 +218,29 @@ function buildHerdrImportDisplay(agent: HerdrAgent): { title: string; summary: s
 }
 
 function selectHerdrPrimaryLabel(agent: HerdrAgent): string {
-  return (
-    [agent.paneLabel, agent.tabLabel, agent.topic, agent.workspaceLabel, agent.name].find(
-      isUsefulHerdrDisplayLabel,
-    ) ??
-    [agent.paneLabel, agent.tabLabel, agent.topic, agent.workspaceLabel, agent.name, agent.target]
-      .map(normalizeHerdrDisplayText)
-      .find((value): value is string => Boolean(value)) ??
-    agent.target
-  );
+  const primary = [
+    agent.taskLabel,
+    agent.topic,
+    agent.workspaceLabel,
+    agent.tabLabel,
+    agent.paneLabel,
+    agent.name,
+  ].find(isUsefulHerdrDisplayLabel);
+  if (primary) {
+    return primary;
+  }
+
+  const directoryName = agent.cwd?.split(/[\\/]/u).findLast(Boolean);
+  if (directoryName) {
+    return `Pi · ${directoryName}`;
+  }
+  const sessionLabel = normalizeHerdrDisplayText(agent.name);
+  return sessionLabel ? `Pi · ${sessionLabel}` : "Pi session";
 }
 
 function selectHerdrContextLabel(agent: HerdrAgent, primary: string): string | null {
   return (
-    [agent.topic, agent.workspaceLabel, agent.tabLabel, agent.paneLabel]
+    [agent.tabLabel, agent.paneLabel, agent.taskLabel, agent.topic, agent.workspaceLabel]
       .filter(isUsefulHerdrDisplayLabel)
       .find((value) => !areHerdrLabelsRedundant(primary, value)) ?? null
   );
@@ -238,7 +248,7 @@ function selectHerdrContextLabel(agent: HerdrAgent, primary: string): string | n
 
 function addHerdrSummaryPart(parts: string[], label: string, value: string | undefined): void {
   const normalized = normalizeHerdrDisplayText(value);
-  if (normalized) {
+  if (normalized && isUsefulHerdrDisplayLabel(normalized)) {
     parts.push(`${label} ${normalized}`);
   }
 }
@@ -253,7 +263,10 @@ function isUsefulHerdrDisplayLabel(value: string | undefined): value is string {
 
 function normalizeHerdrDisplayText(value: string | undefined): string | null {
   const trimmed = value?.trim();
-  return trimmed ? trimmed : null;
+  if (!trimmed || /^FIRSTMATE_OP:\s*v\d+\b/iu.test(trimmed)) {
+    return null;
+  }
+  return trimmed;
 }
 
 function areHerdrLabelsRedundant(left: string, right: string): boolean {

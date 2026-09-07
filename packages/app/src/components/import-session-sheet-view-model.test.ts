@@ -7,6 +7,7 @@ import {
   collectErroredProviderLabels,
   computeEmptyState,
   getPromptPreview,
+  getSessionDebugDetails,
   getSessionTitle,
   resolveProvidersToFetch,
   requiresImportSessionsHostUpgrade,
@@ -211,10 +212,37 @@ describe("getSessionTitle", () => {
     expect(getSessionTitle(entry({ title: "   ", firstPromptPreview: "  Hello  " }))).toBe("Hello");
   });
 
-  it("falls back to Untitled session when both title and first prompt are blank", () => {
+  it("does not show a Firstmate launch brief as the session title", () => {
+    expect(
+      getSessionTitle(
+        entry({
+          providerId: "pi",
+          providerLabel: "Pi",
+          cwd: "/home/hackxit/.treehouse/development-nirie-fd6/project",
+          displayLabel: "FIRSTMATE_OP: v1 launch-brief: You are a crewmate",
+          title: "FIRSTMATE_OP: v1 launch-brief: You are a crewmate",
+          firstPromptPreview: "FIRSTMATE_OP: v1 launch-brief: You are a crewmate",
+        }),
+      ),
+    ).toBe("Pi · project");
+  });
+
+  it("falls back to a compact provider and directory label when title fields are blank", () => {
     expect(getSessionTitle(entry({ title: null, firstPromptPreview: "   " }))).toBe(
-      "Untitled session",
+      "Claude Code · paseo",
     );
+  });
+});
+
+describe("getSessionDebugDetails", () => {
+  it("keeps raw IDs secondary and shortens the execution path", () => {
+    const session = entry({
+      debugIdentifier: "w2M:p1",
+      cwd: "/home/hackxit/.treehouse/paseo-613b68/1/paseo-worker",
+    });
+
+    expect(getSessionDebugDetails(session, true)).toBe("w2M:p1 · paseo-worker");
+    expect(getSessionDebugDetails(session, false)).toBe("w2M:p1");
   });
 });
 
