@@ -235,14 +235,15 @@ describe("getSessionTitle", () => {
 });
 
 describe("getSessionDebugDetails", () => {
-  it("keeps raw IDs secondary and shortens the execution path", () => {
+  it("keeps raw IDs and the full execution path as secondary details", () => {
     const session = entry({
       debugIdentifier: "w2M:p1",
       cwd: "/home/hackxit/.treehouse/paseo-613b68/1/paseo-worker",
     });
 
-    expect(getSessionDebugDetails(session, true)).toBe("w2M:p1 · paseo-worker");
-    expect(getSessionDebugDetails(session, false)).toBe("w2M:p1");
+    expect(getSessionDebugDetails(session)).toBe(
+      "w2M:p1 · /home/hackxit/.treehouse/paseo-613b68/1/paseo-worker",
+    );
   });
 });
 

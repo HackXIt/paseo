@@ -598,7 +598,7 @@ describe("ImportSessionSheet", () => {
     });
   });
 
-  it("keeps Herdr identifiers secondary and omits the redundant scoped path", async () => {
+  it("keeps Herdr identifiers and full scoped paths secondary", async () => {
     const fetchRecentProviderSessions = vi.fn(async () => ({
       requestId: "recent-provider-sessions",
       entries: [
@@ -627,7 +627,7 @@ describe("ImportSessionSheet", () => {
 
     expect(await screen.findByText("finances · fm-copy-review")).toBeTruthy();
     expect(screen.getByText("Pane Review copy worker · Herdr idle")).toBeTruthy();
-    expect(screen.getByText("w2M:p1")).toBeTruthy();
+    expect(screen.getByText("w2M:p1 · /repo/paseo-worker")).toBeTruthy();
   });
 
   it("shows an import error state without closing when selected session import fails", async () => {
@@ -871,7 +871,7 @@ describe("ImportSessionSheet", () => {
     expect(fetchRecentProviderSessions).not.toHaveBeenCalled();
   });
 
-  it("omits cwd from fetch and renders a compact directory on each row when cwd is unset", async () => {
+  it("omits cwd from fetch and renders the full path on each row when cwd is unset", async () => {
     const fetchRecentProviderSessions = vi.fn(async () => ({
       requestId: "recent-provider-sessions",
       entries: [
@@ -905,7 +905,7 @@ describe("ImportSessionSheet", () => {
     expect(fetchRecentProviderSessions).not.toHaveBeenCalledWith(
       expect.objectContaining({ cwd: expect.anything() }),
     );
-    await screen.findByText("other-project");
+    await screen.findByText("/home/me/work/other-project");
   });
 
   it("uses the session's cwd when importing in cwd-less mode and fires onImported", async () => {

@@ -194,20 +194,18 @@ function ImportSessionSheetRow({
   entry,
   disabled,
   importing,
-  showCwd,
   onImportSession,
 }: {
   entry: FetchRecentProviderSessionEntry;
   disabled: boolean;
   importing: boolean;
-  showCwd: boolean;
   onImportSession: (entry: FetchRecentProviderSessionEntry) => void;
 }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const title = getSessionTitle(entry);
   const promptPreview = getPromptPreview(entry);
-  const debugDetails = getSessionDebugDetails(entry, showCwd);
+  const debugDetails = getSessionDebugDetails(entry);
   const lastActivity = formatTimeAgo(new Date(entry.lastActivityAt));
   const ProviderIcon = getProviderIcon(entry.providerId);
   const accessibilityState = useMemo(
@@ -555,7 +553,6 @@ export function ImportSessionSheet({
               entry={entry}
               disabled={importMutation.isPending}
               importing={importingSessionKey === `${entry.providerId}:${entry.providerHandleId}`}
-              showCwd={!cwd}
               onImportSession={handleImportSession}
             />
           ))}

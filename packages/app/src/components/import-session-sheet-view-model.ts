@@ -116,13 +116,10 @@ export function getSessionTitle(entry: FetchRecentProviderSessionEntry): string 
   return providerLabel ?? directoryName ?? i18n.t("importSession.preview.untitledSession");
 }
 
-export function getSessionDebugDetails(
-  entry: FetchRecentProviderSessionEntry,
-  showCwd: boolean,
-): string {
+export function getSessionDebugDetails(entry: FetchRecentProviderSessionEntry): string {
   const debugIdentifier = entry.debugIdentifier?.trim();
-  const directoryName = showCwd ? getDirectoryName(entry.cwd) : null;
-  return [debugIdentifier, directoryName].filter(Boolean).join(" · ");
+  const cwd = entry.cwd.trim();
+  return [debugIdentifier, cwd].filter(Boolean).join(" · ");
 }
 
 export function getPromptPreview(entry: FetchRecentProviderSessionEntry): string {
