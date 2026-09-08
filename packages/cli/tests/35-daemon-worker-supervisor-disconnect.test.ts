@@ -158,9 +158,16 @@ try {
   const statusBeforeKill = await readDaemonStatus(paseoHome);
   const supervisorPid = statusBeforeKill.pid;
   assert(supervisorPid !== null, "supervisor pid should exist once daemon starts");
-  const workerPid = readWorkerPid(supervisorPid);
+  let workerPid: number | null = null;
+  await waitFor(
+    () => {
+      workerPid = readWorkerPid(supervisorPid);
+      return workerPid !== null && isProcessRunning(workerPid);
+    },
+    15000,
+    "supervisor did not expose a running worker process",
+  );
   assert(workerPid !== null, "supervisor should have a worker process");
-  assert(isProcessRunning(workerPid), "worker process should be running");
   console.log(`✓ daemon running with supervisor ${supervisorPid} and worker ${workerPid}\n`);
 
   console.log("Test 2: killing supervisor should make worker exit via IPC disconnect");

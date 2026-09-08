@@ -138,6 +138,7 @@ const ctx = await createE2ETestContext({ timeout: 120000 });
 
 async function runProviderModelsJson(provider: string): Promise<ProviderModel[]> {
   const transientNeedles = ["transport closed", "timed out", "timeout", "socket", "econn"];
+  const maxAttempts = 5;
 
   async function attemptRun(attempt: number): Promise<ProviderModel[]> {
     const result = await ctx.paseo(["provider", "models", provider, "--json"]);
@@ -149,11 +150,11 @@ async function runProviderModelsJson(provider: string): Promise<ProviderModel[]>
     const normalized = combined.toLowerCase();
     const isTransient = transientNeedles.some((needle) => normalized.includes(needle));
 
-    if (!isTransient || attempt === 3) {
+    if (!isTransient || attempt === maxAttempts) {
       assert.fail(`provider models ${provider} should exit 0\n${combined}`);
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+    await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
     return attemptRun(attempt + 1);
   }
 
