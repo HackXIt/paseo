@@ -271,24 +271,60 @@ export function toAgentListItemPayload(agent: AgentSnapshotPayload): AgentListIt
   };
 }
 
+const FIRSTMATE_OPERATION_PREFIX = /^FIRSTMATE_OP:/iu;
+
 export function toRecentProviderSessionDescriptorPayload(
   session: ImportableProviderSession & { provider: string },
   options: RecentProviderSessionProjectionOptions,
 ): RecentProviderSessionDescriptorPayload {
+  const title = suppressInternalImportText(session.title);
+  const firstPromptPreview = suppressInternalImportText(session.firstPromptPreview);
+  const lastPromptPreview = suppressInternalImportText(session.lastPromptPreview);
+  const displayLabel = suppressInternalImportText(session.displayLabel);
+  const summary = suppressInternalImportText(session.summary);
+  const hasInternalPrimary = [session.displayLabel, session.title, session.firstPromptPreview].some(
+    isInternalImportText,
+  );
+  const fallbackLabel = buildImportFallbackLabel(options.providerLabel, session.cwd);
+  const primaryLabel =
+    displayLabel?.trim() || title?.trim() || firstPromptPreview?.trim() || fallbackLabel;
+  const projectedTitle = title ?? (hasInternalPrimary ? primaryLabel : null);
+  const projectedDisplayLabel = displayLabel ?? (hasInternalPrimary ? primaryLabel : null);
+  const projectedSummary =
+    summary ??
+    (hasInternalPrimary ? lastPromptPreview?.trim() || firstPromptPreview?.trim() : null);
+
   return {
     providerId: session.provider,
     providerLabel: options.providerLabel,
     providerHandleId: session.providerHandleId,
     cwd: session.cwd,
-    title: session.title,
-    firstPromptPreview: session.firstPromptPreview,
-    lastPromptPreview: session.lastPromptPreview,
+    title: projectedTitle,
+    firstPromptPreview,
+    lastPromptPreview,
     lastActivityAt: session.lastActivityAt.toISOString(),
-    ...(session.displayLabel ? { displayLabel: session.displayLabel } : {}),
-    ...(session.summary ? { summary: session.summary } : {}),
+    ...(projectedDisplayLabel ? { displayLabel: projectedDisplayLabel } : {}),
+    ...(projectedSummary ? { summary: projectedSummary } : {}),
     ...(session.debugIdentifier ? { debugIdentifier: session.debugIdentifier } : {}),
     ...(session.relatedToRequestedCwd ? { relatedToRequestedCwd: true } : {}),
   };
+}
+
+function suppressInternalImportText(value: string | null | undefined): string | null {
+  return value && !isInternalImportText(value) ? value : null;
+}
+
+function isInternalImportText(value: string | null | undefined): boolean {
+  return Boolean(value && FIRSTMATE_OPERATION_PREFIX.test(value.trim()));
+}
+
+function buildImportFallbackLabel(providerLabel: string, cwd: string): string {
+  const directoryName = cwd
+    .trim()
+    .replace(/[\\/]+$/u, "")
+    .split(/[\\/]/u)
+    .findLast(Boolean);
+  return directoryName ? `${providerLabel} · ${directoryName}` : providerLabel;
 }
 
 export function resolveStoredAgentPayloadUpdatedAt(record: StoredAgentRecord): string {

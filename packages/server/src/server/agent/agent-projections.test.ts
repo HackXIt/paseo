@@ -504,6 +504,31 @@ describe("toRecentProviderSessionDescriptorPayload", () => {
     expect(payload).not.toHaveProperty("nativeHandle");
   });
 
+  it("suppresses Firstmate launch text from import row display fields", () => {
+    const launchBrief = "FIRSTMATE_OP: launch-brief: You are a crewmate";
+    const session: ImportableProviderSession & { provider: string } = {
+      provider: "pi",
+      providerHandleId: "provider-session-id",
+      cwd: "/home/hackxit/.treehouse/development-nirie-fd6/project",
+      title: launchBrief,
+      lastActivityAt: new Date("2026-04-30T12:34:56.000Z"),
+      firstPromptPreview: launchBrief,
+      lastPromptPreview: "retry now",
+      displayLabel: launchBrief,
+      summary: launchBrief,
+    };
+
+    expect(
+      toRecentProviderSessionDescriptorPayload(session, { providerLabel: "Pi" }),
+    ).toMatchObject({
+      title: "Pi · project",
+      firstPromptPreview: null,
+      lastPromptPreview: "retry now",
+      displayLabel: "Pi · project",
+      summary: "retry now",
+    });
+  });
+
   it("preserves null prompt previews", () => {
     const session: ImportableProviderSession & { provider: string } = {
       provider: "claude-custom",

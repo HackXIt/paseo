@@ -1,6 +1,13 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, test } from "vitest";
 
-import { parseHerdrAgentListPayload, parseHerdrAgentPayload } from "./herdr-client.js";
+import {
+  HerdrCliClient,
+  parseHerdrAgentListPayload,
+  parseHerdrAgentPayload,
+} from "./herdr-client.js";
 
 describe("Herdr client parsing", () => {
   test("parses wrapped Herdr agent list output", () => {
@@ -161,6 +168,96 @@ describe("Herdr client parsing", () => {
       tabLabel: "fm-review-copy",
       paneLabel: "Review copy worker",
     });
+  });
+
+  test("enriches agent rows from Herdr workspace, tab, and pane metadata", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "paseo-herdr-cli-"));
+    const script = path.join(root, "herdr-fixture.mjs");
+    await writeFile(
+      script,
+      `
+const operation = process.argv.slice(2, 4).join(" ");
+const payloads = {
+  "agent list": { result: { agents: [{
+    agent: "pi",
+    agent_status: "idle",
+    foreground_cwd: "/workspace/project",
+    pane_id: "w1:p1",
+    tab_id: "w1:t1",
+    workspace_id: "w1",
+    topic: "firstmate",
+    workspace_label: "firstmate",
+    tab_label: "firstmate",
+    pane_label: "firstmate",
+    agent_session: { id: "native-pi-session", value: "/tmp/pi/native.jsonl" }
+  }, {
+    agent: "pi",
+    agent_status: "idle",
+    foreground_cwd: "/workspace/firstmate",
+    pane_id: "w2:p1",
+    tab_id: "w2:t1",
+    workspace_id: "w2",
+    agent_session: { id: "firstmate-native-session", value: "/tmp/pi/firstmate.jsonl" }
+  }] } },
+  "workspace list": { result: { workspaces: [{
+    workspace_id: "w1",
+    label: "firstmate-herdr-import-ux-polish",
+    tokens: { task: "Polish import labels", topic: "Herdr import UX polish" }
+  }, {
+    workspace_id: "w2",
+    label: "firstmate-review-import-ui__3eaec6ea7e22"
+  }] } },
+  "tab list": { result: { tabs: [{
+    tab_id: "w1:t1",
+    workspace_id: "w1",
+    label: "fm-mobile-fallback"
+  }, {
+    tab_id: "w2:t1",
+    workspace_id: "w2",
+    label: "firstmate"
+  }] } },
+  "pane list": { result: { panes: [{
+    pane_id: "w1:p1",
+    tab_id: "w1:t1",
+    workspace_id: "w1",
+    label: "Mobile fallback worker"
+  }, {
+    pane_id: "w2:p1",
+    tab_id: "w2:t1",
+    workspace_id: "w2",
+    label: "firstmate"
+  }] } }
+};
+process.stdout.write(JSON.stringify(payloads[operation]));
+`,
+      "utf8",
+    );
+
+    try {
+      const client = new HerdrCliClient({ command: [process.execPath, script] });
+
+      await expect(client.listAgents()).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            target: "w1:p1",
+            taskLabel: "Polish import labels",
+            topic: "Herdr import UX polish",
+            workspaceLabel: "firstmate-herdr-import-ux-polish",
+            tabLabel: "fm-mobile-fallback",
+            paneLabel: "Mobile fallback worker",
+          }),
+          expect.objectContaining({
+            target: "w2:p1",
+            topic: "Review import ui",
+            workspaceLabel: "firstmate-review-import-ui__3eaec6ea7e22",
+            tabLabel: "firstmate",
+            paneLabel: "firstmate",
+          }),
+        ]),
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   test("parses real path-shaped Herdr Pi get records", () => {

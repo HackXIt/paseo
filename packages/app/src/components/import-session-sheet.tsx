@@ -24,6 +24,7 @@ import {
   collectErroredProviderLabels,
   computeEmptyState,
   getPromptPreview,
+  getSessionDebugDetails,
   getSessionTitle,
   PER_PROVIDER_LIMIT,
   resolveProvidersToFetch,
@@ -193,20 +194,18 @@ function ImportSessionSheetRow({
   entry,
   disabled,
   importing,
-  showCwd,
   onImportSession,
 }: {
   entry: FetchRecentProviderSessionEntry;
   disabled: boolean;
   importing: boolean;
-  showCwd: boolean;
   onImportSession: (entry: FetchRecentProviderSessionEntry) => void;
 }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const title = getSessionTitle(entry);
   const promptPreview = getPromptPreview(entry);
-  const debugDetails = [entry.debugIdentifier?.trim(), entry.cwd].filter(Boolean).join(" · ");
+  const debugDetails = getSessionDebugDetails(entry);
   const lastActivity = formatTimeAgo(new Date(entry.lastActivityAt));
   const ProviderIcon = getProviderIcon(entry.providerId);
   const accessibilityState = useMemo(
@@ -249,7 +248,7 @@ function ImportSessionSheetRow({
         <Text style={styles.rowPreview} numberOfLines={2}>
           {promptPreview}
         </Text>
-        {entry.debugIdentifier || (showCwd && entry.cwd) ? (
+        {debugDetails ? (
           <Text style={styles.rowCwd} numberOfLines={1}>
             {debugDetails}
           </Text>
@@ -554,7 +553,6 @@ export function ImportSessionSheet({
               entry={entry}
               disabled={importMutation.isPending}
               importing={importingSessionKey === `${entry.providerId}:${entry.providerHandleId}`}
-              showCwd={!cwd}
               onImportSession={handleImportSession}
             />
           ))}
