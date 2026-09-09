@@ -9,8 +9,10 @@ export interface HerdrAgent {
   ownStatus?: string;
   cwd: string | null;
   paneId?: string;
+  tabId?: string;
   herdrWorkspaceId?: string;
   parentTarget?: string;
+  taskLabel?: string;
   topic?: string;
   workspaceLabel?: string;
   tabLabel?: string;
@@ -59,8 +61,14 @@ export class HerdrCliClient implements HerdrClient {
   }
 
   async listAgents(): Promise<HerdrAgent[]> {
-    const result = await this.run(["agent", "list"]);
-    return parseHerdrAgentListPayload(parseJsonOutput(result.stdout));
+    const [agentsResult, workspaces, tabs, panes] = await Promise.all([
+      this.run(["agent", "list"]),
+      this.readOptionalPayload(["workspace", "list"]),
+      this.readOptionalPayload(["tab", "list"]),
+      this.readOptionalPayload(["pane", "list"]),
+    ]);
+    const agents = parseHerdrAgentListPayload(parseJsonOutput(agentsResult.stdout));
+    return enrichHerdrPresentation(agents, { workspaces, tabs, panes });
   }
 
   async getAgent(target: string): Promise<HerdrAgent> {
@@ -90,6 +98,15 @@ export class HerdrCliClient implements HerdrClient {
       "text",
     ]);
     return result.stdout;
+  }
+
+  private async readOptionalPayload(args: string[]): Promise<unknown | null> {
+    try {
+      const result = await this.run(args);
+      return parseJsonOutput(result.stdout);
+    } catch {
+      return null;
+    }
   }
 
   private async run(args: string[]): Promise<CommandResult> {
@@ -223,6 +240,7 @@ function parseHerdrAgentRecord(value: unknown): HerdrAgent | null {
       ["cwd"],
     ),
     ...(paneId ? { paneId } : {}),
+    ...(tabId ? { tabId } : {}),
     ...(herdrWorkspaceId ? { herdrWorkspaceId } : {}),
     ...(parentTarget ? { parentTarget } : {}),
     ...labels,
@@ -235,6 +253,115 @@ function parseHerdrAgentRecord(value: unknown): HerdrAgent | null {
     nativeSessionFile,
     lastActivityAt: readDate(value, "lastActivityAt") ?? readDate(value, "last_activity_at"),
   };
+}
+
+interface HerdrPresentationPayloads {
+  workspaces: unknown | null;
+  tabs: unknown | null;
+  panes: unknown | null;
+}
+
+const LOW_INFORMATION_HERDR_LABELS = new Set(["1", "default", "firstmate", "worker"]);
+
+function enrichHerdrPresentation(
+  agents: HerdrAgent[],
+  payloads: HerdrPresentationPayloads,
+): HerdrAgent[] {
+  const workspacesById = indexHerdrRecords(payloads.workspaces, "workspaces", "workspace_id");
+  const tabsById = indexHerdrRecords(payloads.tabs, "tabs", "tab_id");
+  const panesById = indexHerdrRecords(payloads.panes, "panes", "pane_id");
+
+  return agents.map((agent) => {
+    const workspace = agent.herdrWorkspaceId
+      ? workspacesById.get(agent.herdrWorkspaceId)
+      : undefined;
+    const tab = agent.tabId ? tabsById.get(agent.tabId) : undefined;
+    const pane = agent.paneId ? panesById.get(agent.paneId) : undefined;
+    const tokens = workspace ? readRecordField(workspace, "tokens") : null;
+    const taskLabel = preferUsefulHerdrLabel(
+      agent.taskLabel,
+      readFirstString(tokens, ["task", "taskName", "task_name"]),
+    );
+    const workspaceLabel = preferUsefulHerdrLabel(
+      agent.workspaceLabel,
+      readFirstString(workspace, ["label", "name"]),
+    );
+    const reportedTopic = readFirstString(tokens, ["topic", "topicName", "topic_name"]);
+    const topic = preferUsefulHerdrLabel(
+      agent.topic,
+      reportedTopic ?? deriveFirstmateTopicLabel(workspaceLabel),
+    );
+    const tabLabel = preferUsefulHerdrLabel(
+      agent.tabLabel,
+      readFirstString(tab, ["label", "name"]),
+    );
+    const paneLabel = preferUsefulHerdrLabel(
+      agent.paneLabel,
+      readFirstString(pane, ["label", "name"]),
+    );
+
+    return {
+      ...agent,
+      ...(taskLabel ? { taskLabel } : {}),
+      ...(topic ? { topic } : {}),
+      ...(workspaceLabel ? { workspaceLabel } : {}),
+      ...(tabLabel ? { tabLabel } : {}),
+      ...(paneLabel ? { paneLabel } : {}),
+    };
+  });
+}
+
+function preferUsefulHerdrLabel(
+  existing: string | undefined,
+  enriched: string | null,
+): string | undefined {
+  if (isUsefulHerdrLabel(existing)) {
+    return existing;
+  }
+  return isUsefulHerdrLabel(enriched) ? enriched : (existing ?? enriched ?? undefined);
+}
+
+function isUsefulHerdrLabel(value: string | null | undefined): value is string {
+  const normalized = value?.trim();
+  return Boolean(
+    normalized &&
+    !/^FIRSTMATE_OP:/iu.test(normalized) &&
+    !LOW_INFORMATION_HERDR_LABELS.has(normalized.toLowerCase()),
+  );
+}
+
+function deriveFirstmateTopicLabel(workspaceLabel: string | null | undefined): string | null {
+  const match = /^firstmate-(.+)$/iu.exec(workspaceLabel ?? "");
+  if (!match) {
+    return null;
+  }
+  const topicKey = match[1].replace(/__[0-9a-f]{12}$/iu, "");
+  const topic = topicKey.replace(/[-_]+/gu, " ").trim();
+  return topic ? `${topic[0].toUpperCase()}${topic.slice(1)}` : null;
+}
+
+function indexHerdrRecords(
+  payload: unknown,
+  collectionKey: string,
+  idKey: string,
+): Map<string, Record<string, unknown>> {
+  const root = unwrapHerdrResult(payload);
+  const records = readField(root, collectionKey);
+  if (!Array.isArray(records)) {
+    return new Map();
+  }
+
+  const entries: Array<[string, Record<string, unknown>]> = [];
+  for (const record of records) {
+    if (!isRecord(record)) {
+      continue;
+    }
+    const id = readString(record, idKey);
+    if (id) {
+      entries.push([id, record]);
+    }
+  }
+  return new Map(entries);
 }
 
 function readHerdrPresentationLabels(

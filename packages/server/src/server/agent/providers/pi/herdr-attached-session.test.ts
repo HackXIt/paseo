@@ -131,12 +131,12 @@ describe("Herdr attached Pi sessions", () => {
       expect.objectContaining({
         providerHandleId: encodeHerdrAttachedPiHandle(metadata),
         cwd: metadata.cwd,
-        title: "Live Pi: firstmate",
+        title: "Pi · project",
       }),
     ]);
   });
 
-  test("lists live Herdr Pi sessions with friendly Herdr presentation labels", async () => {
+  test("distinguishes same-path Herdr sessions without exposing Firstmate control text", async () => {
     const first = await createAttachment();
     first.metadata.herdrTarget = "w9:p2";
     first.metadata.herdrPaneId = "w9:p2";
@@ -153,25 +153,27 @@ describe("Herdr attached Pi sessions", () => {
         cwd: second.metadata.cwd,
       },
     ]);
-    const copySummary =
-      "Topic finances · Workspace firstmate-finances · Tab fm-copy-review · Pane Review copy worker · Herdr idle";
-    const implementationSummary =
-      "Topic finances · Workspace firstmate-finances · Tab fm-implementation · Pane Implementation worker · Herdr idle";
+    const serverSummary =
+      "Task Polish import labels · Topic Herdr import UX polish · Workspace firstmate-herdr-import-ux-polish · Tab fm-server-title · Herdr idle";
+    const mobileSummary =
+      "Task Polish import labels · Topic Herdr import UX polish · Workspace firstmate-herdr-import-ux-polish · Tab fm-mobile-fallback · Pane Mobile fallback worker · Herdr idle";
     const herdr = new FakeHerdrClient();
     herdr.agents = [
       {
         ...validHerdrAgent(first.metadata, first.file),
-        topic: "finances",
-        workspaceLabel: "firstmate-finances",
-        tabLabel: "fm-copy-review",
-        paneLabel: "Review copy worker",
+        taskLabel: "Polish import labels",
+        topic: "Herdr import UX polish",
+        workspaceLabel: "firstmate-herdr-import-ux-polish",
+        tabLabel: "fm-server-title",
+        paneLabel: "FIRSTMATE_OP: launch-brief: You are a crewmate",
       },
       {
         ...validHerdrAgent(second.metadata, second.file),
-        topic: "finances",
-        workspaceLabel: "firstmate-finances",
-        tabLabel: "fm-implementation",
-        paneLabel: "Implementation worker",
+        taskLabel: "Polish import labels",
+        topic: "Herdr import UX polish",
+        workspaceLabel: "firstmate-herdr-import-ux-polish",
+        tabLabel: "fm-mobile-fallback",
+        paneLabel: "Mobile fallback worker",
       },
     ];
     const sessionDir = await mkdtemp(path.join(tmpdir(), "paseo-empty-pi-sessions-"));
@@ -188,35 +190,43 @@ describe("Herdr attached Pi sessions", () => {
       expect.arrayContaining([
         expect.objectContaining({
           cwd: first.metadata.cwd,
-          title: "Live Pi: Review copy worker · finances",
-          displayLabel: "Live Pi: Review copy worker · finances",
-          lastPromptPreview: copySummary,
-          summary: copySummary,
+          title: "Polish import labels · fm-server-title",
+          displayLabel: "Polish import labels · fm-server-title",
+          lastPromptPreview: serverSummary,
+          summary: serverSummary,
         }),
         expect.objectContaining({
           cwd: first.metadata.cwd,
-          title: "Live Pi: Implementation worker · finances",
-          displayLabel: "Live Pi: Implementation worker · finances",
-          lastPromptPreview: implementationSummary,
-          summary: implementationSummary,
+          title: "Polish import labels · fm-mobile-fallback",
+          displayLabel: "Polish import labels · fm-mobile-fallback",
+          lastPromptPreview: mobileSummary,
+          summary: mobileSummary,
         }),
       ]),
     );
   });
 
-  test("enriches an attachable Herdr list record with friendly detail labels", async () => {
+  test("preserves friendly list labels over generic detail labels", async () => {
     const { file, metadata } = await createAttachment();
     metadata.herdrTarget = "w9:p2";
     metadata.herdrPaneId = "w9:p2";
     const summary = validHerdrAgent(metadata, file);
     const herdr = new FakeHerdrClient();
-    herdr.agents = [summary];
+    herdr.agents = [
+      {
+        ...summary,
+        topic: "finances",
+        workspaceLabel: "firstmate-finances",
+        tabLabel: "fm-copy-review",
+        paneLabel: "Review copy worker",
+      },
+    ];
     herdr.details.set(summary.target, {
       ...summary,
-      topic: "finances",
-      workspaceLabel: "firstmate-finances",
-      tabLabel: "fm-copy-review",
-      paneLabel: "Review copy worker",
+      topic: "firstmate",
+      workspaceLabel: "firstmate",
+      tabLabel: "firstmate",
+      paneLabel: "firstmate",
     });
     const sessionDir = await mkdtemp(path.join(tmpdir(), "paseo-empty-pi-sessions-"));
     const client = new PiRpcAgentClient({
@@ -228,7 +238,7 @@ describe("Herdr attached Pi sessions", () => {
 
     await expect(client.listImportableSessions({ limit: 10 })).resolves.toEqual([
       expect.objectContaining({
-        title: "Live Pi: Review copy worker · finances",
+        title: "finances · fm-copy-review",
         summary:
           "Topic finances · Workspace firstmate-finances · Tab fm-copy-review · Pane Review copy worker · Herdr idle",
       }),
@@ -274,7 +284,7 @@ describe("Herdr attached Pi sessions", () => {
         expect.objectContaining({
           providerHandleId: encodeHerdrAttachedPiHandle(workerMetadata),
           cwd: workerMetadata.cwd,
-          title: "Live Pi: worker",
+          title: "Pi · worker-project",
         }),
       ]),
     );
@@ -391,7 +401,7 @@ describe("Herdr attached Pi sessions", () => {
     });
 
     await expect(client.listImportableSessions({ limit: 1 })).resolves.toEqual([
-      expect.objectContaining({ title: "Live Pi: newer" }),
+      expect.objectContaining({ title: "newer" }),
     ]);
   });
 

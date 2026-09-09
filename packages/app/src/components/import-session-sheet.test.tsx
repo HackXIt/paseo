@@ -427,6 +427,40 @@ describe("ImportSessionSheet", () => {
     screen.getByText("Make the rows readable and provider opaque");
   });
 
+  it("does not render Firstmate launch control text as an import title", async () => {
+    const launchBrief = "FIRSTMATE_OP: v1 launch-brief: You are a crewmate";
+    const fetchRecentProviderSessions = vi.fn(async () => ({
+      requestId: "recent-provider-sessions",
+      entries: [
+        createProviderSessionEntry({
+          providerId: "pi",
+          providerLabel: "Pi",
+          cwd: "/home/hackxit/.treehouse/development-nirie-fd6/project",
+          displayLabel: launchBrief,
+          title: launchBrief,
+          summary: launchBrief,
+          firstPromptPreview: launchBrief,
+          lastPromptPreview: "retry now",
+        }),
+      ],
+    }));
+
+    renderSheet(
+      { fetchRecentProviderSessions, importAgent: vi.fn() } as Pick<
+        DaemonClient,
+        "fetchRecentProviderSessions" | "importAgent"
+      >,
+      {
+        cwd: null,
+        snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("pi")] },
+      },
+    );
+
+    expect(await screen.findByText("Pi · project")).toBeTruthy();
+    expect(screen.getByText("retry now")).toBeTruthy();
+    expect(screen.queryByText(launchBrief)).toBeNull();
+  });
+
   it("keeps cached rows visible and revalidates when reopened", async () => {
     const fetchRecentProviderSessions = vi.fn(async () => ({
       requestId: "recent-provider-sessions",
@@ -564,7 +598,7 @@ describe("ImportSessionSheet", () => {
     });
   });
 
-  it("shows Herdr identifiers and execution paths in scoped import rows", async () => {
+  it("keeps Herdr identifiers and full scoped paths secondary", async () => {
     const fetchRecentProviderSessions = vi.fn(async () => ({
       requestId: "recent-provider-sessions",
       entries: [
@@ -573,8 +607,8 @@ describe("ImportSessionSheet", () => {
           providerLabel: "Pi",
           providerHandleId: "encoded-herdr-handle",
           cwd: "/repo/paseo-worker",
-          displayLabel: "Live Pi: Review copy worker · finances",
-          summary: "Topic finances · Pane Review copy worker · Herdr idle",
+          displayLabel: "finances · fm-copy-review",
+          summary: "Pane Review copy worker · Herdr idle",
           debugIdentifier: "w2M:p1",
         }),
       ],
@@ -591,8 +625,8 @@ describe("ImportSessionSheet", () => {
       },
     );
 
-    expect(await screen.findByText("Live Pi: Review copy worker · finances")).toBeTruthy();
-    expect(screen.getByText("Topic finances · Pane Review copy worker · Herdr idle")).toBeTruthy();
+    expect(await screen.findByText("finances · fm-copy-review")).toBeTruthy();
+    expect(screen.getByText("Pane Review copy worker · Herdr idle")).toBeTruthy();
     expect(screen.getByText("w2M:p1 · /repo/paseo-worker")).toBeTruthy();
   });
 
@@ -837,7 +871,7 @@ describe("ImportSessionSheet", () => {
     expect(fetchRecentProviderSessions).not.toHaveBeenCalled();
   });
 
-  it("omits cwd from fetch and renders the session cwd on each row when cwd is unset", async () => {
+  it("omits cwd from fetch and renders the full path on each row when cwd is unset", async () => {
     const fetchRecentProviderSessions = vi.fn(async () => ({
       requestId: "recent-provider-sessions",
       entries: [

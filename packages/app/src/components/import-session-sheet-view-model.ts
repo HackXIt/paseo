@@ -97,29 +97,53 @@ export function collectErroredProviderLabels(
   return labels;
 }
 
+const FIRSTMATE_OPERATION_PREFIX = /^FIRSTMATE_OP:/iu;
+
 export function getSessionTitle(entry: FetchRecentProviderSessionEntry): string {
-  const displayLabel = entry.displayLabel?.trim();
-  if (displayLabel) {
-    return displayLabel;
+  const titleCandidates = [entry.displayLabel, entry.title, entry.firstPromptPreview];
+  for (const candidate of titleCandidates) {
+    const title = getPublicSessionText(candidate);
+    if (title) {
+      return title;
+    }
   }
-  const title = entry.title?.trim();
-  if (title) {
-    return title;
+
+  const providerLabel = getPublicSessionText(entry.providerLabel);
+  const directoryName = getDirectoryName(entry.cwd);
+  if (providerLabel && directoryName) {
+    return `${providerLabel} · ${directoryName}`;
   }
-  const firstPromptPreview = entry.firstPromptPreview?.trim();
-  if (firstPromptPreview) {
-    return firstPromptPreview;
-  }
-  return i18n.t("importSession.preview.untitledSession");
+  return providerLabel ?? directoryName ?? i18n.t("importSession.preview.untitledSession");
+}
+
+export function getSessionDebugDetails(entry: FetchRecentProviderSessionEntry): string {
+  const debugIdentifier = entry.debugIdentifier?.trim();
+  const cwd = entry.cwd.trim();
+  return [debugIdentifier, cwd].filter(Boolean).join(" · ");
 }
 
 export function getPromptPreview(entry: FetchRecentProviderSessionEntry): string {
-  return (
-    entry.summary?.trim() ||
-    entry.lastPromptPreview?.trim() ||
-    entry.firstPromptPreview?.trim() ||
-    i18n.t("importSession.preview.noPrompt")
-  );
+  const previewCandidates = [entry.summary, entry.lastPromptPreview, entry.firstPromptPreview];
+  for (const candidate of previewCandidates) {
+    const preview = getPublicSessionText(candidate);
+    if (preview) {
+      return preview;
+    }
+  }
+  return i18n.t("importSession.preview.noPrompt");
+}
+
+function getPublicSessionText(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed || FIRSTMATE_OPERATION_PREFIX.test(trimmed)) {
+    return null;
+  }
+  return trimmed;
+}
+
+function getDirectoryName(cwd: string): string | null {
+  const trimmed = cwd.trim().replace(/[\\/]+$/u, "");
+  return trimmed.split(/[\\/]/u).findLast(Boolean) ?? null;
 }
 
 export interface EmptyStateInputs {
