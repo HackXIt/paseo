@@ -144,9 +144,6 @@ export class HerdrAttachedPiSession implements AgentSession {
     if (isBlockedStatus(turnStatus)) {
       throw new Error(`Herdr target ${this.metadata.herdrTarget} is blocked`);
     }
-    if (this.externalTurnId || isRunningStatus(turnStatus)) {
-      throw new Error(`Herdr target ${this.metadata.herdrTarget} is already running`);
-    }
 
     const promptText = await renderHerdrPrompt(prompt, this.uploadsRoot);
     const history = await readPiNativeHistory(this.metadata.nativeSessionFile);

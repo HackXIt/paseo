@@ -386,7 +386,7 @@ Paseo runs the `herdr` command and uses its default session. Set `params.herdr.c
 
 Import discovery includes live Pi workers related to a Herdr target in the requested workspace even when a worker uses another working directory. Import rows prefer useful Herdr task, topic, workspace, tab, and pane labels, including labels enriched from Herdr's workspace, tab, and pane listings. Internal `FIRSTMATE_OP:` launch text and generic labels do not replace those display labels. The target ID and full cwd appear as secondary details for matching and debugging. Importing that worker places it in a workspace for the worker's directory. Paseo assigns the imported worker's parent only when Herdr supplies directional parent-target metadata; sharing a Herdr workspace does not establish parentage.
 
-Herdr's aggregate status can include descendant activity. Paseo uses Herdr's own-status field for external turn activity when it is available, so a running worker does not mark an idle parent as running. Without own status, Paseo does not infer an external turn from aggregate status. Start and completion checks still fall back to aggregate status, which can block a parent prompt while a descendant is running on older Herdr versions.
+Herdr's aggregate status can include descendant activity. Paseo uses Herdr's own-status field for external turn activity when it is available, so a running worker does not mark an idle parent as running. Without own status, Paseo does not infer an external turn from aggregate status. Prompt routing remains attached to the existing Herdr target even when its own or aggregate status is working; Herdr owns delivery to that live target. A blocked target still rejects new input before delivery.
 
 #### Live smoke: disposable Herdr Pi import
 

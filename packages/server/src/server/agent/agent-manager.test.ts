@@ -5543,6 +5543,73 @@ test("waitForAgentRunStart resolves while a foreground run is still only pending
   expect(manager.getAgent(snapshot.id)?.lifecycle).toBe("idle");
 });
 
+test("waitForAgentRunStart reports a real prompt failure but ignores it during a retry", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-retry-start-"));
+  const retryStartEntered = deferred<void>();
+  const allowRetryStart = deferred<void>();
+
+  class RetryStartSession extends TestAgentSession {
+    private attempts = 0;
+
+    override async startTurn(): Promise<{ turnId: string }> {
+      this.attempts += 1;
+      if (this.attempts === 1) {
+        throw new Error("Prior Herdr prompt delivery failed");
+      }
+      retryStartEntered.resolve();
+      await allowRetryStart.promise;
+      return await super.startTurn();
+    }
+  }
+
+  class RetryStartClient extends TestAgentClient {
+    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      return new RetryStartSession(config);
+    }
+  }
+
+  const manager = new AgentManager({
+    clients: { codex: new RetryStartClient() },
+    registry: new AgentStorage(join(workdir, "agents"), logger),
+    logger,
+    idFactory: () => "00000000-0000-4000-8000-000000000128",
+  });
+  const snapshot = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+    workspaceId: undefined,
+  });
+  const firstRun = manager.streamAgent(snapshot.id, "first attempt");
+  const drainFirstRun = (async () => {
+    for await (const _event of firstRun) {
+      // Drain until the provider rejects the first prompt.
+    }
+  })();
+  await expect(manager.waitForAgentRunStart(snapshot.id)).rejects.toThrow(
+    "Prior Herdr prompt delivery failed",
+  );
+  await expect(drainFirstRun).rejects.toThrow("Prior Herdr prompt delivery failed");
+  expect(manager.getAgent(snapshot.id)?.lastError).toBe("Prior Herdr prompt delivery failed");
+
+  const retryRun = manager.streamAgent(snapshot.id, "retry delivery");
+  const drainRetryRun = (async () => {
+    for await (const _event of retryRun) {
+      // Drain the accepted retry.
+    }
+  })();
+  await retryStartEntered.promise;
+
+  const retryWait = manager.waitForAgentRunStart(snapshot.id);
+  let retryError: unknown = null;
+  void retryWait.catch((error: unknown) => {
+    retryError = error;
+  });
+  await Promise.resolve();
+  expect(retryError).toBeNull();
+
+  allowRetryStart.resolve();
+  await expect(retryWait).resolves.toBeUndefined();
+  await drainRetryRun;
+});
+
 test("replaceAgentRun does not emit idle or resolve waiters between interrupted and replacement runs", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-replace-run-"));
   const storagePath = join(workdir, "agents");

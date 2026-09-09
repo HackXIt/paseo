@@ -918,7 +918,7 @@ describe("Herdr attached Pi sessions", () => {
     expect(herdr.prompts).toEqual([]);
   });
 
-  test("does not synthesize a parent turn from ambiguous Herdr aggregate activity", async () => {
+  test("routes a prompt without synthesizing a turn from ambiguous Herdr aggregate activity", async () => {
     const { file, metadata } = await createAttachment();
     const herdr = new FakeHerdrClient();
     herdr.agents = [{ ...validHerdrAgent(metadata, file), status: "working" }];
@@ -932,13 +932,15 @@ describe("Herdr attached Pi sessions", () => {
     session.subscribe((event) => events.push(event));
 
     await session.reconcileHistory();
-    await expect(session.startTurn("unsafe until own status exists")).rejects.toThrow(
-      "Herdr target firstmate is already running",
-    );
+    await expect(session.startTurn("deliver despite aggregate activity")).resolves.toEqual({
+      turnId: expect.any(String),
+    });
     await session.close();
 
     expect(events).not.toContainEqual(expect.objectContaining({ type: "turn_started" }));
-    expect(herdr.prompts).toEqual([]);
+    expect(herdr.prompts).toEqual([
+      { target: "firstmate", text: "deliver despite aggregate activity" },
+    ]);
   });
 
   test("does not mark a parent turn active when only descendant Herdr activity is running", async () => {
@@ -964,10 +966,12 @@ describe("Herdr attached Pi sessions", () => {
     expect(herdr.prompts).toEqual([{ target: "firstmate", text: "parent prompt" }]);
   });
 
-  test("refuses prompt injection while the original Pi is already running", async () => {
+  test("routes a prompt to the attached Pi while its Herdr target is already working", async () => {
     const { file, metadata } = await createAttachment();
     const herdr = new FakeHerdrClient();
-    herdr.agents = [{ ...validHerdrAgent(metadata, file), status: "working" }];
+    herdr.agents = [
+      { ...validHerdrAgent(metadata, file), status: "working", ownStatus: "working" },
+    ];
     const session = new HerdrAttachedPiSession({
       herdrClient: herdr,
       metadata,
@@ -975,12 +979,12 @@ describe("Herdr attached Pi sessions", () => {
       pollIntervalMs: 60_000,
     });
 
-    await expect(session.startTurn("too soon")).rejects.toThrow(
-      "Herdr target firstmate is already running",
-    );
+    await expect(session.startTurn("deliver to the live target")).resolves.toEqual({
+      turnId: expect.any(String),
+    });
     await session.close();
 
-    expect(herdr.prompts).toEqual([]);
+    expect(herdr.prompts).toEqual([{ target: "firstmate", text: "deliver to the live target" }]);
   });
 
   test("interrupts the original Herdr target instead of a managed Pi runtime", async () => {
